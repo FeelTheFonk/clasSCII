@@ -37,6 +37,8 @@ pub fn draw(
     audio: Option<&AudioFeatures>,
     fps_counter: &FpsCounter,
     preset_name: Option<&str>,
+    loaded_visual: Option<&str>,
+    loaded_audio: Option<&str>,
     _sidebar_dirty: bool,
     state: &RenderState,
 ) {
@@ -48,13 +50,13 @@ pub fn draw(
     } else {
         // === Sidebar & Layout setup ===
         let sidebar_width = 24u16; // Slight expansion for keybind hints
-        let h_chunks =
-            Layout::horizontal([Constraint::Min(40), Constraint::Length(sidebar_width)])
-                .split(area);
+        let h_chunks = Layout::horizontal([Constraint::Min(40), Constraint::Length(sidebar_width)])
+            .split(area);
 
         // === Canvas & Spectrum splits ===
         let canvas_area = if config.show_spectrum {
-            let v_chunks = Layout::vertical([Constraint::Min(10), Constraint::Length(3)]).split(h_chunks[0]);
+            let v_chunks =
+                Layout::vertical([Constraint::Min(10), Constraint::Length(3)]).split(h_chunks[0]);
             let spectrum_area = v_chunks[1];
             draw_spectrum(frame, spectrum_area, audio);
             v_chunks[0]
@@ -66,7 +68,17 @@ pub fn draw(
 
         // === Sidebar ===
         let sidebar_area = h_chunks[1];
-        draw_sidebar(frame, sidebar_area, config, audio, fps_counter, preset_name, state);
+        draw_sidebar(
+            frame,
+            sidebar_area,
+            config,
+            audio,
+            fps_counter,
+            preset_name,
+            loaded_visual,
+            loaded_audio,
+            state,
+        );
     }
 
     // === Help overlay ===
@@ -108,6 +120,7 @@ fn draw_spectrum(frame: &mut Frame, area: Rect, audio: Option<&AudioFeatures>) {
 }
 
 /// Draw the parameter sidebar with all live values.
+#[allow(clippy::too_many_arguments, clippy::too_many_lines)]
 fn draw_sidebar(
     frame: &mut Frame,
     area: Rect,
@@ -115,6 +128,8 @@ fn draw_sidebar(
     audio: Option<&AudioFeatures>,
     fps_counter: &FpsCounter,
     preset_name: Option<&str>,
+    loaded_visual: Option<&str>,
+    loaded_audio: Option<&str>,
     state: &RenderState,
 ) {
     let mode_str = match config.render_mode {
@@ -179,15 +194,27 @@ fn draw_sidebar(
         kv("[p/P]", "Prst", preset_name.unwrap_or("Custom").to_string()),
         kv("[1-0]", "Char", charset_name.to_string()),
         kv("[d/D]", "Dens", format!("{:.2}", config.density_scale)),
-        kv("[c]", "Colr", (if config.color_enabled { "ON" } else { "OFF" }).to_string()),
+        kv(
+            "[c]",
+            "Colr",
+            (if config.color_enabled { "ON" } else { "OFF" }).to_string(),
+        ),
         kv("[m]", "CMod", color_mode_str.to_string()),
-        kv("[i]", "Inv", (if config.invert { "ON" } else { "OFF" }).to_string()),
+        kv(
+            "[i]",
+            "Inv",
+            (if config.invert { "ON" } else { "OFF" }).to_string(),
+        ),
         kv("[/]", "Cont", format!("{:.1}", config.contrast)),
         kv("{ }", "Brgt", format!("{:.2}", config.brightness)),
         kv("-/+", "Sat", format!("{:.1}", config.saturation)),
         kv("[e]", "Edge", format!("{:.1}", config.edge_threshold)),
         kv("[E]", "EMix", format!("{:.2}", config.edge_mix)),
-        kv("[s]", "Shap", (if config.shape_matching { "ON" } else { "OFF" }).to_string()),
+        kv(
+            "[s]",
+            "Shap",
+            (if config.shape_matching { "ON" } else { "OFF" }).to_string(),
+        ),
         kv("[a]", "Aspc", format!("{:.1}", config.aspect_ratio)),
         kv("[b]", "BG", bg_str.to_string()),
         kv("[f/F]", "Fade", format!("{:.1}", config.fade_decay)),
@@ -221,9 +248,30 @@ fn draw_sidebar(
     )));
     lines.push(Line::from(format!(" {fps_str}")));
     lines.push(Line::from(format!(" {ft_str}")));
+    // Fichiers chargés
+    let truncate = |name: &str, max: usize| -> String {
+        if name.len() > max {
+            format!("..{}", &name[name.len().saturating_sub(max - 2)..])
+        } else {
+            name.to_string()
+        }
+    };
+    if let Some(name) = loaded_visual {
+        lines.push(Line::from(vec![
+            Span::styled(" V ", Style::default().fg(Color::DarkGray)),
+            Span::styled(truncate(name, 18), Style::default().fg(Color::Cyan)),
+        ]));
+    }
+    if let Some(name) = loaded_audio {
+        lines.push(Line::from(vec![
+            Span::styled(" A ", Style::default().fg(Color::DarkGray)),
+            Span::styled(truncate(name, 18), Style::default().fg(Color::Magenta)),
+        ]));
+    }
+
     lines.push(Line::from(""));
     lines.push(Line::from(Span::styled(
-        " ? = help",
+        " o/O=open  ?=help",
         Style::default().fg(Color::DarkGray),
     )));
 
@@ -262,6 +310,8 @@ fn draw_help_overlay(frame: &mut Frame, area: Rect) {
         Line::from(" ←/→      Seek ±5s"),
         Line::from(" v        Toggle spectrum"),
         Line::from(" p/P      Cycle preset"),
+        Line::from(" o        Open visual"),
+        Line::from(" O        Open audio"),
         Line::from(" x        Toggle fullscreen"),
         Line::from(" ?        Toggle help"),
         Line::from(""),

@@ -1,3 +1,4 @@
+use std::path::Path;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -17,6 +18,27 @@ use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind};
 use ratatui::DefaultTerminal;
 
 use crate::pipeline;
+
+/// Category of a loaded media file, determined by extension.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MediaType {
+    Image,
+    Video,
+    Audio,
+}
+
+/// Classify a file path into a media type based on extension.
+fn classify_media(path: &Path) -> Option<MediaType> {
+    let ext = path.extension()?.to_str()?.to_ascii_lowercase();
+    match ext.as_str() {
+        "png" | "jpg" | "jpeg" | "bmp" | "gif" | "tiff" | "tif" | "webp" => Some(MediaType::Image),
+        "mp4" | "mkv" | "avi" | "mov" | "wmv" | "flv" | "webm" | "m4v" | "ts" | "mpg" | "mpeg" => {
+            Some(MediaType::Video)
+        }
+        "wav" | "mp3" | "flac" | "ogg" | "aac" | "m4a" | "wma" | "opus" => Some(MediaType::Audio),
+        _ => None,
+    }
+}
 
 /// Application state.
 ///
@@ -77,6 +99,14 @@ pub struct App {
     pub video_cmd_tx: Option<flume::Sender<VideoCommand>>,
     /// Channel pour les commandes audio (Play, Pause, Seek).
     pub audio_cmd_tx: Option<flume::Sender<AudioCommand>>,
+    /// Nom du fichier visuel chargé (image/vidéo).
+    pub loaded_visual_name: Option<String>,
+    /// Nom du fichier audio chargé.
+    pub loaded_audio_name: Option<String>,
+    /// Flag: l'utilisateur a demandé l'ouverture du file dialog visuel.
+    pub open_visual_requested: bool,
+    /// Flag: l'utilisateur a demandé l'ouverture du file dialog audio.
+    pub open_audio_requested: bool,
 }
 
 impl App {
@@ -130,6 +160,10 @@ impl App {
             #[cfg(feature = "video")]
             video_cmd_tx,
             audio_cmd_tx,
+            loaded_visual_name: None,
+            loaded_audio_name: None,
+            open_visual_requested: false,
+            open_audio_requested: false,
         })
     }
 
@@ -137,6 +171,7 @@ impl App {
     ///
     /// # Errors
     /// Returns an error if terminal operations fail.
+    #[allow(clippy::too_many_lines)]
     pub fn run(&mut self, mut terminal: DefaultTerminal) -> Result<()> {
         let mut last_frame = Instant::now();
 
@@ -167,6 +202,16 @@ impl App {
             // === Polling événements non-bloquant ===
             while event::poll(Duration::ZERO)? {
                 self.handle_event(&event::read()?);
+            }
+
+            // === File dialogs si demandés ===
+            if self.open_visual_requested {
+                self.open_visual_requested = false;
+                self.open_visual_dialog(&mut terminal);
+            }
+            if self.open_audio_requested {
+                self.open_audio_requested = false;
+                self.open_audio_dialog(&mut terminal);
             }
 
             // === Vérifier resize terminal ===
@@ -243,7 +288,9 @@ impl App {
                     .file_stem()
                     .and_then(|s| s.to_str())
             };
-            
+
+            let loaded_visual = self.loaded_visual_name.as_deref();
+            let loaded_audio = self.loaded_audio_name.as_deref();
             terminal.draw(|frame| {
                 af_render::ui::draw(
                     frame,
@@ -252,6 +299,8 @@ impl App {
                     audio_features.as_ref(),
                     fps_counter,
                     preset_name,
+                    loaded_visual,
+                    loaded_audio,
                     sidebar_dirty,
                     &state,
                 );
@@ -281,7 +330,9 @@ impl App {
         }) = *event
         {
             match code {
-                KeyCode::Char('q' | '?' | ' ') | KeyCode::Esc => self.handle_navigation_key(code),
+                KeyCode::Char('q' | '?' | ' ' | 'o' | 'O') | KeyCode::Esc => {
+                    self.handle_navigation_key(code);
+                }
                 KeyCode::Tab
                 | KeyCode::Char(
                     '1'..='9'
@@ -351,6 +402,12 @@ impl App {
                 };
                 self.sidebar_dirty = true;
             }
+            KeyCode::Char('o') => {
+                self.open_visual_requested = true;
+            }
+            KeyCode::Char('O') => {
+                self.open_audio_requested = true;
+            }
             _ => {}
         }
     }
@@ -406,7 +463,11 @@ impl App {
                 c.edge_threshold = if c.edge_threshold > 0.0 { 0.0 } else { 0.3 };
             }),
             KeyCode::Char('E') => self.toggle_config(|c| {
-                c.edge_mix = if c.edge_mix >= 1.0 { 0.0 } else { c.edge_mix + 0.25 };
+                c.edge_mix = if c.edge_mix >= 1.0 {
+                    0.0
+                } else {
+                    c.edge_mix + 0.25
+                };
             }),
             KeyCode::Char('s') => self.toggle_config(|c| c.shape_matching = !c.shape_matching),
             KeyCode::Char('a') => self.toggle_config(|c| {
@@ -607,6 +668,164 @@ impl App {
         Ok(())
     }
 
+    // === File picker & runtime source switching ===
+    //
+    // Deux canaux indépendants :
+    //   o → source visuelle (image OU vidéo) — ne touche pas à l'audio
+    //   O → source audio (musique)           — ne touche pas au visuel
+    //
+    // Cela permet : image+musique, vidéo+musique, vidéo seul, audio seul, etc.
+
+    /// Suspend le TUI, ouvre un dialog natif, restaure le TUI. Retourne le path choisi.
+    fn pick_file(
+        terminal: &mut DefaultTerminal,
+        title: &str,
+        filters: &[(&str, &[&str])],
+    ) -> Option<std::path::PathBuf> {
+        crossterm::terminal::disable_raw_mode().ok();
+        crossterm::execute!(std::io::stdout(), crossterm::terminal::LeaveAlternateScreen).ok();
+
+        let mut dialog = rfd::FileDialog::new().set_title(title);
+        for &(name, exts) in filters {
+            dialog = dialog.add_filter(name, exts);
+        }
+        let picked = dialog.pick_file();
+
+        crossterm::terminal::enable_raw_mode().ok();
+        crossterm::execute!(std::io::stdout(), crossterm::terminal::EnterAlternateScreen).ok();
+        terminal.clear().ok();
+
+        picked
+    }
+
+    /// Open visual source dialog (image or video).
+    fn open_visual_dialog(&mut self, terminal: &mut DefaultTerminal) {
+        let filters: &[(&str, &[&str])] = &[
+            (
+                "Images & Video",
+                &[
+                    "png", "jpg", "jpeg", "bmp", "gif", "webp", "mp4", "mkv", "avi", "mov", "webm",
+                    "flv", "m4v",
+                ],
+            ),
+            ("Images", &["png", "jpg", "jpeg", "bmp", "gif", "webp"]),
+            ("Video", &["mp4", "mkv", "avi", "mov", "webm", "flv", "m4v"]),
+        ];
+        let picked = Self::pick_file(terminal, "Open Visual \u{2014} clasSCII", filters);
+        self.terminal_size = (0, 0);
+
+        if let Some(path) = picked {
+            if let Some(media_type) = classify_media(&path) {
+                match media_type {
+                    MediaType::Image | MediaType::Video => {
+                        self.shutdown_visual();
+                        self.load_visual(&path, media_type);
+                    }
+                    MediaType::Audio => {
+                        log::warn!(
+                            "Fichier audio sélectionné dans le dialog visuel — utiliser Shift+O"
+                        );
+                    }
+                }
+            } else {
+                log::warn!("Extension non reconnue: {}", path.display());
+            }
+        }
+    }
+
+    /// Open audio source dialog.
+    fn open_audio_dialog(&mut self, terminal: &mut DefaultTerminal) {
+        let filters: &[(&str, &[&str])] = &[(
+            "Audio",
+            &["wav", "mp3", "flac", "ogg", "aac", "m4a", "opus"],
+        )];
+        let picked = Self::pick_file(terminal, "Open Audio \u{2014} clasSCII", filters);
+        self.terminal_size = (0, 0);
+
+        if let Some(path) = picked {
+            self.shutdown_audio();
+            self.start_audio_from_path(&path.to_string_lossy());
+            self.loaded_audio_name = path.file_name().and_then(|n| n.to_str()).map(String::from);
+            self.sidebar_dirty = true;
+        }
+    }
+
+    /// Stop only the visual source (image/video), leave audio untouched.
+    fn shutdown_visual(&mut self) {
+        #[cfg(feature = "video")]
+        {
+            if let Some(ref tx) = self.video_cmd_tx {
+                let _ = tx.send(VideoCommand::Quit);
+            }
+            self.video_cmd_tx = None;
+        }
+        self.frame_rx = None;
+        self.current_frame = None;
+    }
+
+    /// Stop only the audio source, leave visual untouched.
+    fn shutdown_audio(&mut self) {
+        if let Some(ref tx) = self.audio_cmd_tx {
+            let _ = tx.send(AudioCommand::Quit);
+        }
+        self.audio_cmd_tx = None;
+        self.audio_output = None;
+    }
+
+    /// Load a visual source (image or video) and update sidebar name.
+    fn load_visual(&mut self, path: &Path, media_type: MediaType) {
+        match media_type {
+            MediaType::Image => match af_source::image::ImageSource::new(path) {
+                Ok(mut source) => {
+                    self.current_frame = af_core::traits::Source::next_frame(&mut source);
+                    self.frame_rx = None;
+                    log::info!("Image chargée: {}", path.display());
+                }
+                Err(e) => log::error!("Erreur chargement image: {e}"),
+            },
+            MediaType::Video => self.start_video(path),
+            MediaType::Audio => {} // unreachable in this context
+        }
+        self.loaded_visual_name = path.file_name().and_then(|n| n.to_str()).map(String::from);
+        self.sidebar_dirty = true;
+        if self.state == AppState::Paused {
+            self.state = AppState::Running;
+        }
+    }
+
+    /// Start video thread (without touching audio).
+    #[cfg(feature = "video")]
+    fn start_video(&mut self, path: &Path) {
+        let (frame_tx, frame_rx) = flume::bounded(3);
+        let (cmd_tx, cmd_rx) = flume::bounded(10);
+        match af_source::video::spawn_video_thread(path.to_path_buf(), frame_tx, cmd_rx) {
+            Ok((_handle, _native_dims)) => {
+                self.frame_rx = Some(frame_rx);
+                self.video_cmd_tx = Some(cmd_tx);
+                self.terminal_size = (0, 0);
+                log::info!("Vidéo démarrée: {}", path.display());
+            }
+            Err(e) => log::error!("Erreur démarrage vidéo: {e}"),
+        }
+    }
+
+    #[cfg(not(feature = "video"))]
+    fn start_video(&mut self, path: &Path) {
+        log::warn!("Feature 'video' non compilée: {}", path.display());
+    }
+
+    /// Start audio analysis from a file path.
+    fn start_audio_from_path(&mut self, path_str: &str) {
+        match pipeline::start_audio(path_str, &self.config) {
+            Ok((output, tx)) => {
+                self.audio_output = Some(output);
+                self.audio_cmd_tx = tx;
+                log::info!("Audio démarré: {path_str}");
+            }
+            Err(e) => log::warn!("Audio non disponible: {e}"),
+        }
+    }
+
     /// Applique le live preset engine.
     fn cycle_preset(&mut self, forward: bool) {
         if self.presets.is_empty() {
@@ -629,7 +848,7 @@ impl App {
                 let old_cfg = self.config.load();
                 new_cfg.fullscreen = old_cfg.fullscreen;
                 new_cfg.show_spectrum = old_cfg.show_spectrum;
-                
+
                 self.config.store(Arc::new(new_cfg));
                 self.sidebar_dirty = true;
                 self.terminal_size = (0, 0); // Force redraw / reallocation au cas où le mode de rendu (Braille/Ascii) ait changé.

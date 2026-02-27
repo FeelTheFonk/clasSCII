@@ -95,6 +95,19 @@ fn main() -> Result<()> {
         app_instance.current_frame = Some(frame);
     }
 
+    // 9b. Set initial loaded file names from CLI args
+    if let Some(ref path) = cli.image {
+        app_instance.loaded_visual_name =
+            path.file_name().and_then(|n| n.to_str()).map(String::from);
+    } else if let Some(ref path) = cli.video {
+        app_instance.loaded_visual_name =
+            path.file_name().and_then(|n| n.to_str()).map(String::from);
+    }
+    if let Some(ref audio_arg) = cli.audio {
+        let p = std::path::Path::new(audio_arg.as_str());
+        app_instance.loaded_audio_name = p.file_name().and_then(|n| n.to_str()).map(String::from);
+    }
+
     // 10. Boucle principale
     let result = app_instance.run(terminal);
 

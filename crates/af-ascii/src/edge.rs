@@ -34,15 +34,15 @@ pub fn detect_edge(frame: &FrameBuffer, x: u32, y: u32) -> (f32, f32) {
 
     let mag = (gx * gx + gy * gy).sqrt();
     let norm_mag = (mag / 1442.0).min(1.0); // max theoretical: sqrt(2) * 1020 ≈ 1442
-    
+
     // Si magnitude presque nulle, angle 0
     let angle = if mag < 1.0 { 0.0 } else { gy.atan2(gx) };
-    
+
     (norm_mag, angle)
 }
 
 /// ASCIIfy-Them SOTA logic : Maps an edge angle [-PI, PI] to a strict directional ascii char: `|`, `_`, `/`, `\`.
-/// 
+///
 /// Returns `char`
 #[must_use]
 pub fn ascii_edge_char(angle_rad: f32) -> char {
@@ -55,7 +55,10 @@ pub fn ascii_edge_char(angle_rad: f32) -> char {
     // Secteurs asciify-them
     if (80.0..100.0).contains(&deg) || (260.0..280.0).contains(&deg) {
         '|'
-    } else if (170.0..190.0).contains(&deg) || (350.0..=360.0).contains(&deg) || (0.0..10.0).contains(&deg) {
+    } else if (170.0..190.0).contains(&deg)
+        || (350.0..=360.0).contains(&deg)
+        || (0.0..10.0).contains(&deg)
+    {
         '_'
     } else if (35.0..55.0).contains(&deg) || (215.0..235.0).contains(&deg) {
         '/'

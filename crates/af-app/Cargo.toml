@@ -26,6 +26,7 @@ crossterm = { workspace = true }
 ratatui = { workspace = true }
 notify = { workspace = true }
 ctrlc = { workspace = true }
+rfd = { workspace = true }
 midir = { workspace = true, optional = true }
 
 [features]
