@@ -7,7 +7,7 @@ This engine pushes the limits of typography by integrating advanced topologies (
 
 - **Terminal**: GPU-accelerated (Alacritty, Kitty, WezTerm) for real-time mode.
 - **FFmpeg + FFprobe**: Required in `PATH` for video source decoding and batch export.
-- **Rust 1.85+**: Edition 2024.
+- **Rust 1.88+**: Edition 2024.
 
 ## Architecture
 
