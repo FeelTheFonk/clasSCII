@@ -88,7 +88,7 @@ pub fn run_batch_export(
                 let mut y = 1970u64;
                 let mut remaining = days;
                 loop {
-                    let days_in_year = if y % 4 == 0 && (y % 100 != 0 || y % 400 == 0) {
+                    let days_in_year = if y.is_multiple_of(4) && (!y.is_multiple_of(100) || y.is_multiple_of(400)) {
                         366
                     } else {
                         365
@@ -99,7 +99,7 @@ pub fn run_batch_export(
                     remaining -= days_in_year;
                     y += 1;
                 }
-                let leap = y % 4 == 0 && (y % 100 != 0 || y % 400 == 0);
+                let leap = y.is_multiple_of(4) && (!y.is_multiple_of(100) || y.is_multiple_of(400));
                 let mdays: [u64; 12] = [
                     31,
                     if leap { 29 } else { 28 },

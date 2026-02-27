@@ -145,10 +145,11 @@ impl App {
         let mut presets = Vec::new();
         if let Ok(entries) = std::fs::read_dir("config/presets") {
             for entry in entries.flatten() {
-                if let Ok(ft) = entry.file_type() {
-                    if ft.is_file() && entry.path().extension().is_some_and(|e| e == "toml") {
-                        presets.push(entry.path());
-                    }
+                if let Ok(ft) = entry.file_type()
+                    && ft.is_file()
+                    && entry.path().extension().is_some_and(|e| e == "toml")
+                {
+                    presets.push(entry.path());
                 }
             }
         }
@@ -247,10 +248,10 @@ impl App {
             let audio_features = self.audio_output.as_mut().map(|out| *out.read());
 
             // === Lire frame source ===
-            if let Some(ref rx) = self.frame_rx {
-                if let Ok(frame) = rx.try_recv() {
-                    self.current_frame = Some(frame);
-                }
+            if let Some(ref rx) = self.frame_rx
+                && let Ok(frame) = rx.try_recv()
+            {
+                self.current_frame = Some(frame);
             }
 
             // === Appliquer audio mappings à la config ===

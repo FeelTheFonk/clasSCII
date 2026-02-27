@@ -134,7 +134,7 @@ fn decode_via_symphonia(path: &Path) -> Result<(Vec<f32>, u32)> {
         let interleaved = buf.samples();
 
         for chunk in interleaved.chunks(channels) {
-            if sample_idx % downsample_factor == 0 {
+            if sample_idx.is_multiple_of(downsample_factor) {
                 let mono: f32 = chunk.iter().sum::<f32>() / channels as f32;
                 all_samples.push(mono);
             }
