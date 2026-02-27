@@ -237,14 +237,14 @@ fn read_exact_or_eof<R: Read>(reader: &mut R, buf: &mut [u8]) -> Result<bool> {
 
 /// Retourne `true` si le thread doit quitter (Quit reçu ou canal déconnecté).
 /// Modifie `state` et `maybe_child` en conséquence.
-/// `need_restart` est mis à `true` si ffmpeg doit être redémarré (Seek/Resize).
+/// Redémarre ffmpeg en interne si Seek ou Resize est reçu.
 fn process_commands(
     cmd_rx: &Receiver<VideoCommand>,
     state: &mut VideoState,
     maybe_child: &mut Option<Child>,
     path: &Path,
-    need_restart: &mut bool,
 ) -> bool {
+    let mut need_restart = false;
     loop {
         match cmd_rx.try_recv() {
             Ok(VideoCommand::Quit) => {
@@ -265,7 +265,7 @@ fn process_commands(
             }
             Ok(VideoCommand::Seek(delta)) => {
                 state.pos_secs = (state.pos_secs + delta).max(0.0);
-                *need_restart = true;
+                need_restart = true;
                 log::debug!("Thread vidéo: Seek -> {:.1}s", state.pos_secs);
             }
             Ok(VideoCommand::Resize(nw, nh)) => {
@@ -276,7 +276,7 @@ fn process_commands(
                     for _ in 0..POOL_SIZE {
                         state.pool.push(Arc::new(FrameBuffer::new(nw, nh)));
                     }
-                    *need_restart = true;
+                    need_restart = true;
                     log::debug!("Thread vidéo: Resize -> {nw}x{nh}");
                 }
             }
@@ -288,14 +288,14 @@ fn process_commands(
                 return true;
             }
         }
-        // Vérifier s'il y a un path à utiliser en cas de restart immédiat
-        if *need_restart {
+        // Restart ffmpeg si Seek ou Resize reçu
+        if need_restart {
             if let Some(c) = maybe_child.as_mut() {
                 let _ = c.kill();
             }
             *maybe_child =
                 spawn_ffmpeg_pipe(path, state.w, state.h, state.pos_secs, state.target_fps);
-            *need_restart = false;
+            need_restart = false;
         }
     }
 }
@@ -367,28 +367,16 @@ fn video_loop(
 ) {
     let mut state = VideoState::new(&info);
     let frame_period = Duration::from_secs_f64(1.0 / info.fps.clamp(1.0, 120.0));
-    let mut maybe_child: Option<Child> =
-        spawn_ffmpeg_pipe(path, state.w, state.h, state.pos_secs, state.target_fps);
+    // DECISION: Pas de spawn immédiat — on attend le premier VideoCommand::Resize
+    // envoyé par check_resize() du thread principal (~1 frame après démarrage).
+    // Évite un double-spawn inutile (min(640,360) puis taille réelle du canvas).
+    let mut maybe_child: Option<Child> = None;
     let mut last_frame = Instant::now();
 
     loop {
         // === Commandes (non-bloquant) ===
-        let mut need_restart = false;
-        if process_commands(
-            cmd_rx,
-            &mut state,
-            &mut maybe_child,
-            path,
-            &mut need_restart,
-        ) {
+        if process_commands(cmd_rx, &mut state, &mut maybe_child, path) {
             return;
-        }
-        if need_restart {
-            if let Some(mut c) = maybe_child {
-                let _ = c.kill();
-            }
-            maybe_child =
-                spawn_ffmpeg_pipe(path, state.w, state.h, state.pos_secs, state.target_fps);
         }
 
         // === Pause ===

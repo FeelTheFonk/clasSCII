@@ -54,96 +54,119 @@ pub fn spawn_audio_thread(
 
 /// Spawn both audio playback and analysis from a decoded audio file.
 ///
-/// The file is decoded once, played back through the default output device,
-/// and analyzed in parallel. The playback loops continuously.
+/// Le décodage se fait à l'intérieur du thread spawné (non-bloquant pour
+/// le thread principal). Le terminal démarre immédiatement ; l'audio démarre
+/// une fois le décodage terminé (arrière-plan). Supporté : WAV, MP3, FLAC,
+/// OGG, AAC-LC via symphonia ; HE-AAC et autres formats exotiques via ffmpeg.
 ///
 /// # Errors
-/// Returns an error if decoding or audio output initialization fails.
+/// Retourne une erreur uniquement si le spawn du thread OS échoue (très rare).
+/// Les erreurs de décodage ou de config audio sont loguées dans le thread.
 pub fn spawn_audio_file_thread(
     path: &std::path::Path,
     target_fps: u32,
     audio_smoothing: f32,
     cmd_rx: flume::Receiver<AudioCommand>,
 ) -> anyhow::Result<triple_buffer::Output<AudioFeatures>> {
-    let (all_samples, sample_rate) = decode::decode_file(path)?;
-
-    if all_samples.is_empty() {
-        anyhow::bail!("Audio file is empty: {}", path.display());
-    }
-
-    // Shared state for playback
-    let samples = Arc::new(all_samples);
-    let playback_pos = Arc::new(AtomicUsize::new(0));
-
-    // --- Start cpal output stream for playback ---
-    let host = cpal::default_host();
-    let output_device = host
-        .default_output_device()
-        .ok_or_else(|| anyhow::anyhow!("No audio output device found"))?;
-
-    let supported_config = output_device.default_output_config()?;
-    let out_sample_format = supported_config.sample_format();
-    let output_config = supported_config.config();
-
-    let out_channels = output_config.channels as usize;
-    let out_sample_rate = output_config.sample_rate.0;
-
-    // Resampling ratio for local zero-alloc linear read
-    let sample_rate_ratio = f64::from(sample_rate) / f64::from(out_sample_rate);
-
-    let is_paused = Arc::new(AtomicBool::new(false));
-
-    let output_stream = match out_sample_format {
-        cpal::SampleFormat::F32 => build_playback_stream::<f32>(
-            &output_device,
-            &output_config,
-            Arc::clone(&samples),
-            Arc::clone(&playback_pos),
-            Arc::clone(&is_paused),
-            sample_rate_ratio,
-            out_channels,
-        )?,
-        cpal::SampleFormat::I16 => build_playback_stream::<i16>(
-            &output_device,
-            &output_config,
-            Arc::clone(&samples),
-            Arc::clone(&playback_pos),
-            Arc::clone(&is_paused),
-            sample_rate_ratio,
-            out_channels,
-        )?,
-        cpal::SampleFormat::U16 => build_playback_stream::<u16>(
-            &output_device,
-            &output_config,
-            Arc::clone(&samples),
-            Arc::clone(&playback_pos),
-            Arc::clone(&is_paused),
-            sample_rate_ratio,
-            out_channels,
-        )?,
-        fmt => anyhow::bail!("Unsupported audio format: {fmt:?}"),
-    };
-
-    output_stream.play()?;
-    log::info!("Audio playback started @ {out_sample_rate}Hz, {out_channels} channels");
-
-    // --- Start analysis thread ---
-    let analysis_samples = Arc::clone(&samples);
-    let analysis_pos = Arc::clone(&playback_pos);
+    // Clone du chemin pour le thread (le décodage se fait en arrière-plan).
+    let path = path.to_path_buf();
     let (mut buf_input, buf_output) = TripleBuffer::new(&AudioFeatures::default()).split();
 
     thread::Builder::new()
         .name("af-audio-file".to_string())
         .spawn(move || {
-            // Keep the output stream alive in this thread
+            // --- Décodage INSIDE le thread → thread principal non-bloquant ---
+            let (all_samples, sample_rate) = match decode::decode_file(&path) {
+                Ok(r) => r,
+                Err(e) => {
+                    log::warn!("Audio: échec décodage {} : {e}", path.display());
+                    return;
+                }
+            };
+            if all_samples.is_empty() {
+                log::error!("Audio: fichier vide: {}", path.display());
+                return;
+            }
+
+            let samples = Arc::new(all_samples);
+            let playback_pos = Arc::new(AtomicUsize::new(0));
+
+            // --- Config cpal output device ---
+            let host = cpal::default_host();
+            let Some(output_device) = host.default_output_device() else {
+                log::error!("Audio: aucun périphérique de sortie audio trouvé.");
+                return;
+            };
+            let supported_config = match output_device.default_output_config() {
+                Ok(c) => c,
+                Err(e) => {
+                    log::error!("Audio: échec config cpal: {e}");
+                    return;
+                }
+            };
+            let out_sample_format = supported_config.sample_format();
+            let output_config = supported_config.config();
+            let out_channels = output_config.channels as usize;
+            let out_sample_rate = output_config.sample_rate.0;
+            let sample_rate_ratio = f64::from(sample_rate) / f64::from(out_sample_rate);
+            let is_paused = Arc::new(AtomicBool::new(false));
+
+            // --- Build playback stream (dispatch sur le format cpal) ---
+            let stream_result = match out_sample_format {
+                cpal::SampleFormat::F32 => build_playback_stream::<f32>(
+                    &output_device,
+                    &output_config,
+                    Arc::clone(&samples),
+                    Arc::clone(&playback_pos),
+                    Arc::clone(&is_paused),
+                    sample_rate_ratio,
+                    out_channels,
+                ),
+                cpal::SampleFormat::I16 => build_playback_stream::<i16>(
+                    &output_device,
+                    &output_config,
+                    Arc::clone(&samples),
+                    Arc::clone(&playback_pos),
+                    Arc::clone(&is_paused),
+                    sample_rate_ratio,
+                    out_channels,
+                ),
+                cpal::SampleFormat::U16 => build_playback_stream::<u16>(
+                    &output_device,
+                    &output_config,
+                    Arc::clone(&samples),
+                    Arc::clone(&playback_pos),
+                    Arc::clone(&is_paused),
+                    sample_rate_ratio,
+                    out_channels,
+                ),
+                fmt => {
+                    log::error!("Audio: format cpal non supporté: {fmt:?}");
+                    return;
+                }
+            };
+            let output_stream = match stream_result {
+                Ok(s) => s,
+                Err(e) => {
+                    log::error!("Audio: impossible de créer le stream de lecture: {e}");
+                    return;
+                }
+            };
+            if let Err(e) = output_stream.play() {
+                log::error!("Audio: play() échoué: {e}");
+                return;
+            }
+            log::info!("Audio playback started @ {out_sample_rate}Hz, {out_channels} channels");
+
+            // --- Boucle d'analyse (garde le stream vivant via _stream) ---
             let _stream = output_stream;
             run_file_analysis_loop(
                 &mut buf_input,
                 target_fps,
                 sample_rate,
                 audio_smoothing,
-                &analysis_samples,
-                &analysis_pos,
+                &samples,
+                &playback_pos,
                 &is_paused,
                 &cmd_rx,
             );
