@@ -47,7 +47,10 @@ realfft = "3.5"
 symphonia = { version = "0.5", features = ["mp3", "flac", "ogg", "wav", "aac", "isomp4", "mkv"] }
 
 # === Vidéo (feature-gated) ===
-# ffmpeg-the-third = "2"    # Activé via feature flag
+# DEVIATION: R9 — ffmpeg-the-third retiré (vcpkg/pkg-config absents sur Windows MSVC).
+# Remplacé par subprocess std::process dans af-source/src/video.rs.
+# Prérequis runtime: ffmpeg + ffprobe en PATH (WinGet: winget install ffmpeg).
+# ffmpeg-the-third = "2"    # Désactivé — voir af-source/src/video.rs DEVIATION R9
 # nokhwa = "0.10"           # Activé via feature flag
 
 # === Utilitaires ===

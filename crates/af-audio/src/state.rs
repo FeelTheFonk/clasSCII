@@ -26,7 +26,10 @@ use crate::smoothing::FeatureSmoother;
 ///
 /// # Errors
 /// Returns an error if audio capture fails to initialize.
-pub fn spawn_audio_thread(target_fps: u32, audio_smoothing: f32) -> anyhow::Result<triple_buffer::Output<AudioFeatures>> {
+pub fn spawn_audio_thread(
+    target_fps: u32,
+    audio_smoothing: f32,
+) -> anyhow::Result<triple_buffer::Output<AudioFeatures>> {
     let mut capture = AudioCapture::start_default()?;
     let sample_rate = capture.sample_rate();
 
@@ -35,9 +38,15 @@ pub fn spawn_audio_thread(target_fps: u32, audio_smoothing: f32) -> anyhow::Resu
     thread::Builder::new()
         .name("af-audio".to_string())
         .spawn(move || {
-            run_analysis_loop(&mut buf_input, target_fps, sample_rate, audio_smoothing, &mut |out| {
-                capture.read_samples(out);
-            });
+            run_analysis_loop(
+                &mut buf_input,
+                target_fps,
+                sample_rate,
+                audio_smoothing,
+                &mut |out| {
+                    capture.read_samples(out);
+                },
+            );
         })?;
 
     Ok(buf_output)
@@ -78,7 +87,7 @@ pub fn spawn_audio_file_thread(
 
     let out_channels = output_config.channels as usize;
     let out_sample_rate = output_config.sample_rate.0;
-    
+
     // Resampling ratio for local zero-alloc linear read
     let sample_rate_ratio = f64::from(sample_rate) / f64::from(out_sample_rate);
 
@@ -294,7 +303,7 @@ where
             }
 
             let current_shared = playback_pos_write.load(Ordering::Relaxed);
-            
+
             // Resync if seek externally modified playback_pos (threshold = 4 frames of drift)
             if current_shared.abs_diff(last_sync_pos) > out_channels * 4 {
                 local_pos_f = current_shared as f64;
@@ -303,15 +312,15 @@ where
             for frame in data.chunks_mut(out_channels) {
                 let pos_usize = (local_pos_f as usize) % total;
                 let sample = playback_samples[pos_usize];
-                
+
                 let out_sample = T::from_sample(sample);
                 for out_channel in frame.iter_mut() {
                     *out_channel = out_sample;
                 }
-                
+
                 local_pos_f += sample_rate_ratio;
             }
-            
+
             if local_pos_f >= total as f64 {
                 local_pos_f -= total as f64;
             }

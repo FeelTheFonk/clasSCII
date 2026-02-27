@@ -46,7 +46,8 @@ pub fn start_audio(
             if audio_path.exists() {
                 log::info!("Starting audio file analysis: {path}");
                 let (cmd_tx, cmd_rx) = flume::bounded(10);
-                let out = af_audio::state::spawn_audio_file_thread(audio_path, fps, smoothing, cmd_rx)?;
+                let out =
+                    af_audio::state::spawn_audio_file_thread(audio_path, fps, smoothing, cmd_rx)?;
                 Ok((out, Some(cmd_tx)))
             } else {
                 anyhow::bail!("Audio source not found: {path}")
