@@ -1,120 +1,202 @@
+<div align="center">
+
 # clasSCII Engine
 
-Real-time, audio-reactive ASCII/Unicode rendering engine for terminal-based Text User Interface (TUI) applications. Engineered for robust performance and deterministic execution in constraint-heavy CLI environments.
+**Real-time, audio-reactive ASCII/Unicode rendering engine for terminal-based TUI applications.**<br>
+*Engineered for deterministic execution in constraint-heavy CLI environments.*
+
+[![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/FeelTheFonk/ASCIIFORGE/rust.yml?style=flat-square&logo=github)](https://github.com/FeelTheFonk/ASCIIFORGE/actions)
+[![MSRV](https://img.shields.io/crates/msrv/classcii?style=flat-square&logo=rust)](https://rust-lang.org)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](https://opensource.org/licenses/MIT)
+
+</div>
+
+<br>
+
+> [!CAUTION]
+> Hardware Acceleration Requirement: To prevent rendering computation bottlenecks, deployment environments must utilize a GPU-accelerated terminal emulator (e.g., Alacritty, Kitty, WezTerm).
+
+> [!IMPORTANT]
+> Zero-Allocation Guarantee: The engine strictly enforces a zero-allocation policy (`Vec` creation, `String` allocation) within the active rendering loop. All mutating states are processed in-place strictly within pre-allocated boundaries.
+
+---
+
+<details open>
+<summary><b>Table of Contents</b></summary>
+
+- [1. System Architecture & Concurrency Model](#1-system-architecture--concurrency-model)
+- [2. Algorithmic Complexity & Signal Processing](#2-algorithmic-complexity--signal-processing)
+- [3. Workspace Topology & Internal Specifications](#3-workspace-topology--internal-specifications)
+- [4. Deployment, Build & Compilation Profiles](#4-deployment-build--compilation-profiles)
+- [5. Usage & Pipeline Instantiation](#5-usage--pipeline-instantiation)
+- [6. Real-Time Telemetry & Controls](#6-real-time-telemetry--controls)
+- [7. Configuration & State Management](#7-configuration--state-management)
+- [8. Quality Assurance & Structural Safety](#8-quality-assurance--structural-safety)
+
+</details>
+
+---
 
 ## 1. System Architecture & Concurrency Model
 
-clasSCII implements a lock-free, zero-allocation (in hot paths) three-thread topology to guarantee stable frame rates and prevent acoustic or visual stuttering under high DSP load.
+clasSCII implements a lock-free, zero-allocation three-thread topology to guarantee stable frame rates under high Digital Signal Processing (DSP) loads.
 
-```text
-┌────────────────────────┐      ┌────────────────────────┐      ┌────────────────────────┐
-│     Source Thread      │      │      Main Thread       │      │      Audio Thread      │
-│     (I/O, Decode)      │───▶  │  (Render, TUI, State)  │  ◀───│   (DSP, FFT, Capture)  │
-│  [Asynchronous Stream] │      │  [Lock-Free Pipeline]  │      │  [Real-Time Priority]  │
-└────────────────────────┘      └────────────────────────┘      └────────────────────────┘
+### Core Pipeline Topology
+
+```mermaid
+graph TD
+    classDef default fill:#1e1e1e,stroke:#cccccc,stroke-width:1px,color:#ffffff
+    
+    subgraph Source["Source Thread (I/O, Decode)"]
+        S1[Video Codec / Image Decode]
+        S2[Asynchronous Stream Buffer]
+        S1 --> S2
+    end
+
+    subgraph Audio["Audio Thread (DSP, FFT)"]
+        A1[Microphone Capture]
+        A2[Real-Time FFT Analysis]
+        A3[Feature Extraction]
+        A1 --> A2 --> A3
+    end
+
+    subgraph Main["Main Thread (Render, TUI, State)"]
+        M1[Lock-Free State Aggregation]
+        M2[Luma/Edge Matrix Convolution]
+        M3[Ratatui Partial Redraw]
+        M1 --> M2 --> M3
+    end
+
+    S2 -- "Triple Buffer (Lock-Free)" --> M1
+    A3 -- "Flume Event Channel" --> M1
+    
+    M3 --> Out([stdout / PTY])
 ```
 
-- **Inter-Process Communication (IPC):** Lock-free memory synchronization is achieved via `triple_buffer` for frame payloads and `flume` channels for event signaling. This structure eliminates mutex contention and false sharing across CPU cache lines.
-- **Memory Coherence:** The engine strictly enforces zero dynamic allocation (`Vec` creation, etc.) during the active render loop. Buffers are pre-allocated at initialization, and mutating state is handled in-place.
+- Inter-Process Communication (IPC): Lock-free memory synchronization is achieved via `triple_buffer` for frame payloads and non-blocking `flume` channels for event signaling. This architecture theoretically eliminates mutex contention and false sharing across CPU cache lines.
 
-## 2. Workspace Topology & Internal Specifications
+## 2. Algorithmic Complexity & Signal Processing
 
-The codebase is partitioned into 6 distinct crates to enforce strict boundary isolation and separation of concerns.
+The translation of binary streams into Unicode abstractions relies on continuous signal processing and discrete spatial convolution.
+
+### Digital Signal Processing (DSP)
+
+Operates a continuous Fast Fourier Transform (FFT) analysis loop. The discrete Fourier representation operates over windowed matrices $x_n$:
+
+$$
+X_k = \sum_{n=0}^{N-1} x_n \cdot e^{-i 2 \pi k n / N}
+$$
+
+Windowing functions and localized smoothing filters extract crest frequencies and percussive transients for real-time state mutations.
+
+### Visual Matrix Translation
+
+The mapping algorithm utilizes perceptual luminance computation:
+
+$$
+Y = 0.2126R + 0.7152G + 0.0722B
+$$
+
+It implements finite impulse response (FIR) kernel-based edge detection and high-density Unicode spatial quantization (Braille, Quadrants) to map continuous pixel structures within a discrete character grid.
+
+### Render Output Gating
+
+Terminal byte-bandwidth is computationally gated. Utilizing `ratatui`'s buffer diffing state algorithms, I/O bound operations (`stdout` writes) are minimized via calculated partial frame redraws.
+
+## 3. Workspace Topology & Internal Specifications
+
+The codebase is partitioned into 6 modular crates to enforce strict hardware-layer isolation.
 
 | Crate | Abstraction Layer | Core Responsibilities |
 |-------|-------------------|-----------------------|
-| `af-core` | Shared primitives | Traits, unified configuration matrix, core frame buffers. |
-| `af-audio` | Digital Signal Processing | Audio capture, Fast Fourier Transform (FFT) analysis, beat detection, continuous feature extraction. |
-| `af-ascii` | Visual Algorithms | Luma-to-ASCII mapping, edge detection convolution, Braille/Halfblock/Quadrant quantization, spatial shape matching. |
-| `af-render` | Display & TUI | Terminal rendering backend (via `ratatui`), partial redraws, UI overlays, effect pipelines, hardware FPS logic. |
-| `af-source` | Input Pipeline | Visual input stream decoders: image payloads, video streams, webcam capture, procedural generation. |
-| `af-app` | Orchestration | Application entry point, event loop management, thread lifecycle, pipeline orchestration. |
-
-## 3. Algorithmic Complexity & DSP
-
-- **Audio Processing:** Operates a continuous FFT analysis loop. Windowing functions and localized smoothing filters extract stable crest frequencies and percussive transients for real-time reactivity.
-- **Pixel Mapping:** The visual translation algorithm extends beyond scalar luminance mapping. It implements kernel-based edge detection and high-density Unicode spatial quantization (Braille, Quadrants) to maximize structural fidelity within a discrete terminal matrix.
-- **Render Output:** Terminal bandwidth is strictly gated. By utilizing `ratatui`'s buffer diffing algorithms, I/O bound `stdout` operations are minimized via partial frame redraws.
+| `af-core` | Shared Primitives | Traits, unified configuration matrix, core `triple_buffer` topologies. |
+| `af-audio` | Signal Processing | Audio capture (CPAL), FFT analysis, beat detection matrices. |
+| `af-ascii` | Visual Algorithms | Luma-to-ASCII projection, convolution kernels, Braille/Halfblock/Quadrant quantization. |
+| `af-render` | Display Backend | Terminal rendering (`ratatui`), partial redraws, hardware FPS target logic. |
+| `af-source` | Input Pipeline | Stream decoders (Image buffers, FFmpeg, V4L2 Webcams, procedural generators). |
+| `af-app` | Orchestrator | Application entry point, thread lifecycle daemon, explicit pipeline construction. |
 
 ## 4. Deployment, Build & Compilation Profiles
 
-The project is designed to leverage maximum compiler optimization (LTO, codegen-units) in deployment contexts.
+Designed to utilize full LLVM compiler optimizations (`LTO = "fat"`, `codegen-units = 1`) for the release target.
+
+> [!NOTE]
+> System Dependencies: Compiling with the `video` feature requires C-ABI linkage libraries. Ensure `libavformat-dev`, `libavutil-dev`, `libavcodec-dev`, and `libswscale-dev` are present in the host environment.
 
 ```bash
-# Development Profile (Unoptimized, fast iteration)
+# Development Profile (Fast compilation, unoptimized binary)
 cargo build --workspace
 
-# Production Release Profile (Maximized optimization, LTO enabled, Video support)
+# Production Profile (Maximized optimization, LTO enabled, Video pipeline active)
 cargo build --release --features video
 ```
-
-*Note: For optimal runtime performance, deployment environments must utilize hardware-accelerated terminal emulators (e.g., Alacritty, Kitty).*
 
 ## 5. Usage & Pipeline Instantiation
 
 ```bash
-# Static Image Payload
+# Static visual payload allocation
 classcii --image path/to/image.png
 
-# Image Payload with Live Microphone Reactivity
+# Visual payload modulated by continuous microphone reactivity
 classcii --image path/to/image.png --audio mic
 
-# Video Stream with Embedded Audio Track
+# Video stream decoded concurrently with embedded audio
 classcii --video path/to/video.mp4
 
-# Algorithmic Override (Strict Render Mode & Target Frame Rate)
+# Algorithmic override (Strict topology and deterministic polling rate)
 classcii --image photo.jpg --mode braille --fps 60
 
-# Preset Configuration Instantiation
+# Configuration preset mapping
 classcii --image photo.jpg --preset psychedelic
 ```
 
 ## 6. Real-Time Telemetry & Controls
 
+Dynamic hot-reloading native support ensures thread persistence during structural state modifications.
+
+<details>
+<summary><b>Expand Keyboard Bindings Matrix</b></summary>
+
 | Keybind | Assigned Action |
 |---------|-----------------|
-| `Tab` | Cycle render topology (Ascii → HalfBlock → Braille → Quadrant) |
-| `1`–`5` | Select target character set matrix |
-| `c` | Toggle chromatic mode (Color) |
-| `i` | Invert luminance output scale |
-| `e` | Toggle convolutional edge detection |
-| `s` | Toggle spatial shape matching algorithm |
-| `m` | Cycle color mapping strategy |
-| `b` | Cycle background style buffer |
-| `d` / `D` | Render density scalar (±0.25) |
-| `[` / `]` | Viewport contrast adjust (±0.1) |
-| `{` / `}` | Viewport brightness adjust (±0.05) |
-| `-` / `+` | Global saturation adjust (±0.1) |
-| `f` / `F` | Temporal fade decay factor (±0.1) |
-| `g` / `G` | Post-process glow intensity (±0.1) |
-| `↑` / `↓` | Audio DSP reactivity sensitivity (±0.1) |
-| `←` / `→` | Stream explicit seek (±5s video/audio) |
-| `Space` | Pause/Resume core engine pipeline |
-| `?` | Toggle telemetry & diagnostic overlay |
+| `Tab` | Cycle render topology (`Ascii` → `HalfBlock` → `Braille` → `Quadrant`) |
+| `1`–`5` | Select target character set mapping matrix |
+| `c` | Toggle chromatic ANSI sequence mode |
+| `i` | Invert luminance coordinate scalar |
+| `e` | Toggle convolutional edge detection pass |
+| `s` | Toggle nearest-neighbor shape matching interpolation |
+| `m` | Cycle color quantization strategy |
+| `b` | Cycle background buffer style |
+| `d` / `D` | Render density scalar ($\pm 0.25$) |
+| `[` / `]` | Viewport contrast scalar ($\pm 0.1$) |
+| `{` / `}` | Viewport brightness scalar ($\pm 0.05$) |
+| `-` / `+` | Global saturation scalar ($\pm 0.1$) |
+| `f` / `F` | Temporal fade decay polynomial ($\pm 0.1$) |
+| `g` / `G` | Post-process glow amplitude ($\pm 0.1$) |
+| `↑` / `↓` | Audio DSP reactivity sensitivity scalar ($\pm 0.1$) |
+| `←` / `→` | Data stream absolute positional seek ($\pm 5$s) |
+| `Space` | Pause/Resume engine computation pipeline |
+| `?` | Toggle telemetry & hardware diagnostic overlay |
 | `q` / `Esc` | Terminate application process gracefully |
+
+</details>
 
 ## 7. Configuration & State Management
 
-System boundaries and initial states are defined via strongly-typed TOML matrices. Dynamic hot-reloading native support ensures thread persistence during state changes.
-
-**Default state boundary:** `config/default.toml`
-**Presets directory:** `config/presets/`
+**Defined Boundaries:** `config/default.toml`  
+**Presets Schema Directory:** `config/presets/*.toml`
 
 ```bash
-# Load explicit configuration matrix path
 classcii --image photo.jpg --config my_config.toml
-
-# Execute via predefined visual preset
 classcii --image photo.jpg --preset ambient
 ```
 
 ## 8. Quality Assurance & Structural Safety
 
-- **Panic-Free Runtime Guarantee:** The invocation of `unwrap()` or `expect()` is strictly banned outside of explicit testing modules. All runtime exceptions are propagated, typed, and handled deterministically.
-- **Static Analysis Compliance:** The integration pipeline enforces zero-tolerance `clippy` analysis.
-  `cargo clippy --workspace -- -D warnings` must evaluate to 0 warnings.
-- **Memory Safety Boundaries:** Any FFI linkage or raw pointer manipulation (e.g., C-bindings for video codecs or atomic lock-free structures) is strictly isolated within defined scopes.
+- **Panic-Free Runtime Guarantee:** The invocation of `unwrap()` or `expect()` is structurally barred outside testing modules. Exceptions are bubbled, typed (`Result<T, E>`), and deterministically logged.
+- **Static Analysis Integrity:** `cargo clippy --workspace -- -D warnings` must strictly evaluate to `0` warnings prior to integration.
+- **Memory Safety Constraints:** All Foreign Function Interfaces (`FFI`) and raw pointer arithmetic logic are strictly bounded within `unsafe { ... }` blocks and subjected to explicit manual audits.
 
 ## 9. License
 
-MIT License.
+MIT
