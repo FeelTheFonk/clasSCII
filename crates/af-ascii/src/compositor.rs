@@ -138,11 +138,15 @@ impl Compositor {
 
                 // B. Edge Blending
                 if edge_enabled {
-                    let normalized = crate::edge::detect_edge(frame, px, py);
-                    if normalized > config.edge_threshold {
-                        let idx = ((normalized * (edge_chars.len() - 1) as f32) as usize)
-                            .min(edge_chars.len() - 1);
-                        if mix >= 1.0 || normalized * mix > 0.5 {
+                    let (normalized_mag, angle) = crate::edge::detect_edge(frame, px, py);
+                    if normalized_mag > config.edge_threshold && (mix >= 1.0 || normalized_mag * mix > 0.5) {
+                        // En mode ASCII pur, on utilise le mapping directionnel asciify-them
+                        if is_ascii && !use_shape {
+                            cell.ch = crate::edge::ascii_edge_char(angle);
+                        } else {
+                            // Fallback pour les modes blocs ou si les shapes sont déjà actives
+                            let idx = ((normalized_mag * (edge_chars.len() - 1) as f32) as usize)
+                                .min(edge_chars.len() - 1);
                             cell.ch = edge_chars[idx];
                         }
                     }

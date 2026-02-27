@@ -142,6 +142,7 @@ fn draw_sidebar(
 
     let charset_names = [
         "Compact", "Standard", "Full", "Blocks", "Minimal", "Glitch 1", "Glitch 2", "Digital",
+        "Classic", "Extended",
     ];
     let charset_name = charset_names.get(config.charset_index).unwrap_or(&"Custom");
 
@@ -163,7 +164,7 @@ fn draw_sidebar(
             Style::default().fg(Color::Yellow),
         )),
         Line::from(format!(" [Tab] Mode: {mode_str}")),
-        Line::from(format!(" [1-8] Char: {charset_name}")),
+        Line::from(format!(" [1-0] Char: {charset_name}")),
         Line::from(format!(" [d/D] Dens: {:.2}", config.density_scale)),
         Line::from(format!(
             "  [c]  Colr: {}",

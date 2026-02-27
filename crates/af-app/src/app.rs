@@ -275,7 +275,8 @@ impl App {
                 KeyCode::Char('q' | '?' | ' ') | KeyCode::Esc => self.handle_navigation_key(code),
                 KeyCode::Tab
                 | KeyCode::Char(
-                    '1'..='8'
+                    '1'..='9'
+                    | '0'
                     | 'd'
                     | 'D'
                     | 'c'
@@ -367,6 +368,8 @@ impl App {
             KeyCode::Char('6') => self.set_charset(5, charset::CHARSET_GLITCH_1),
             KeyCode::Char('7') => self.set_charset(6, charset::CHARSET_GLITCH_2),
             KeyCode::Char('8') => self.set_charset(7, charset::CHARSET_DIGITAL),
+            KeyCode::Char('9') => self.set_charset(8, charset::CHARSET_CLASSIC_GRADIENT),
+            KeyCode::Char('0') => self.set_charset(9, charset::CHARSET_EXTENDED_SMOOTH),
             KeyCode::Char('d') => {
                 self.toggle_config(|c| c.density_scale = (c.density_scale - 0.25).max(0.25));
             }

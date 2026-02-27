@@ -24,6 +24,13 @@ pub const CHARSET_GLITCH_2: &str = " ▂▃▄▅▆▇█";
 /// Digital Matrix — purisme binaire et cryptique.
 pub const CHARSET_DIGITAL: &str = " 01";
 
+/// Classic Gradient — Séquence progressive fluide (asciify-them style).
+pub const CHARSET_CLASSIC_GRADIENT: &str = " .':;il!i><+?-)(ItfjxnoC00@";
+
+/// Extended Smooth Gradient — Plus de 70 glyphs pour mapping luma sub-pixel.
+pub const CHARSET_EXTENDED_SMOOTH: &str =
+    "…^‚:;Il!i><v+_—?1[ł{1)(|/tfjrxnuvczXYUJCLQØ0Zmwqpdbkhао*#МW&8⅝В@$";
+
 /// Lookup table mapping luminance [0..255] → character.
 ///
 /// Pre-computed at startup for O(1) per-pixel cost.
