@@ -44,23 +44,23 @@ pub fn draw(
     if config.fullscreen {
         canvas::render_grid(frame.buffer_mut(), area, grid);
     } else {
-        // Horizontal split: [canvas | sidebar(20)]
-        let sidebar_width = 20u16;
+        // === Sidebar & Layout setup ===
+        let sidebar_width = 24u16; // Slight expansion for keybind hints
         let h_chunks =
             Layout::horizontal([Constraint::Min(40), Constraint::Length(sidebar_width)])
                 .split(area);
 
-        // Vertical split of left panel: [canvas | spectrum(3)]
-        let v_chunks =
-            Layout::vertical([Constraint::Min(10), Constraint::Length(3)]).split(h_chunks[0]);
+        // === Canvas & Spectrum splits ===
+        let canvas_area = if config.show_spectrum {
+            let v_chunks = Layout::vertical([Constraint::Min(10), Constraint::Length(3)]).split(h_chunks[0]);
+            let spectrum_area = v_chunks[1];
+            draw_spectrum(frame, spectrum_area, audio);
+            v_chunks[0]
+        } else {
+            h_chunks[0]
+        };
 
-        // === Canvas ===
-        let canvas_area = v_chunks[0];
         canvas::render_grid(frame.buffer_mut(), canvas_area, grid);
-
-        // === Spectrum bar ===
-        let spectrum_area = v_chunks[1];
-        draw_spectrum(frame, spectrum_area, audio);
 
         // === Sidebar ===
         let sidebar_area = h_chunks[1];
@@ -140,7 +140,9 @@ fn draw_sidebar(
         RenderState::Quitting => "⏹ QUIT",
     };
 
-    let charset_names = ["Compact", "Standard", "Full", "Blocks", "Minimal"];
+    let charset_names = [
+        "Compact", "Standard", "Full", "Blocks", "Minimal", "Glitch 1", "Glitch 2", "Digital",
+    ];
     let charset_name = charset_names.get(config.charset_index).unwrap_or(&"Custom");
 
     let fps_str = format!("{:.0} FPS", fps_counter.fps());
@@ -160,37 +162,37 @@ fn draw_sidebar(
             "─ Render ──",
             Style::default().fg(Color::Yellow),
         )),
-        Line::from(format!(" Mode: {mode_str}")),
-        Line::from(format!(" Chars: {charset_name}")),
-        Line::from(format!(" Density: {:.2}", config.density_scale)),
+        Line::from(format!(" [Tab] Mode: {mode_str}")),
+        Line::from(format!(" [1-8] Char: {charset_name}")),
+        Line::from(format!(" [d/D] Dens: {:.2}", config.density_scale)),
         Line::from(format!(
-            " Color: {}",
+            "  [c]  Colr: {}",
             if config.color_enabled { "ON" } else { "OFF" }
         )),
-        Line::from(format!(" CMode: {color_mode_str}")),
+        Line::from(format!("  [m]  CMod: {color_mode_str}")),
         Line::from(format!(
-            " Invert: {}",
+            "  [i]  Inv:  {}",
             if config.invert { "ON" } else { "OFF" }
         )),
-        Line::from(format!(" Contr: {:.1}", config.contrast)),
-        Line::from(format!(" Bright: {:.2}", config.brightness)),
-        Line::from(format!(" Satur: {:.1}", config.saturation)),
-        Line::from(format!(" Edges: {:.1}", config.edge_threshold)),
+        Line::from(format!("  [/]  Cont: {:.1}", config.contrast)),
+        Line::from(format!("  {{/}}  Brgt: {:.2}", config.brightness)),
+        Line::from(format!("  -/+  Sat:  {:.1}", config.saturation)),
+        Line::from(format!("  [e]  Edge: {:.1}", config.edge_threshold)),
         Line::from(format!(
-            " Shape: {}",
+            "  [s]  Shap: {}",
             if config.shape_matching { "ON" } else { "OFF" }
         )),
-        Line::from(format!(" Aspect: {:.1}", config.aspect_ratio)),
-        Line::from(format!(" BG: {bg_str}")),
-        Line::from(format!(" Fade: {:.1}", config.fade_decay)),
-        Line::from(format!(" Glow: {:.1}", config.glow_intensity)),
+        Line::from(format!("  [a]  Aspc: {:.1}", config.aspect_ratio)),
+        Line::from(format!("  [b]  BG:   {bg_str}")),
+        Line::from(format!(" [f/F] Fade: {:.1}", config.fade_decay)),
+        Line::from(format!(" [g/G] Glow: {:.1}", config.glow_intensity)),
         Line::from(""),
         Line::from(Span::styled(
             "─ Audio ───",
             Style::default().fg(Color::Yellow),
         )),
-        Line::from(format!(" Sens: {:.1}", config.audio_sensitivity)),
-        Line::from(format!(" Smooth: {:.2}", config.audio_smoothing)),
+        Line::from(format!("  ↑/↓  Sens: {:.1}", config.audio_sensitivity)),
+        Line::from(format!("       Smth: {:.2}", config.audio_smoothing)),
     ];
 
     if let Some(features) = audio {
@@ -252,6 +254,8 @@ fn draw_help_overlay(frame: &mut Frame, area: Rect) {
         Line::from(" s        Toggle shapes"),
         Line::from(" ↑/↓      Audio sensitivity"),
         Line::from(" ←/→      Seek ±5s"),
+        Line::from(" v        Toggle spectrum"),
+        Line::from(" p/P      Cycle preset"),
         Line::from(" x        Toggle fullscreen"),
         Line::from(" ?        Toggle help"),
         Line::from(""),

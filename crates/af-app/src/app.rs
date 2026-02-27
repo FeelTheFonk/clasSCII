@@ -68,6 +68,10 @@ pub struct App {
     pub prev_grid: AsciiGrid,
     /// Pre-allocated brightness buffer for glow effect (avoids per-frame alloc).
     pub glow_brightness_buf: Vec<u8>,
+    /// Live preset engine : liste des chemins .toml disponibles.
+    pub presets: Vec<std::path::PathBuf>,
+    /// Index courant dans `presets`.
+    pub current_preset_idx: usize,
     /// Channel pour les commandes vidéo (Play, Pause, Seek).
     #[cfg(feature = "video")]
     pub video_cmd_tx: Option<flume::Sender<VideoCommand>>,
@@ -92,6 +96,18 @@ impl App {
         let canvas_height = terminal_size.1.saturating_sub(3);
         let initial_charset = config.load().charset.clone();
 
+        let mut presets = Vec::new();
+        if let Ok(entries) = std::fs::read_dir("config/presets") {
+            for entry in entries.flatten() {
+                if let Ok(ft) = entry.file_type() {
+                    if ft.is_file() && entry.path().extension().is_some_and(|e| e == "toml") {
+                        presets.push(entry.path());
+                    }
+                }
+            }
+        }
+        presets.sort(); // Predictable iteration order
+
         Ok(Self {
             state: AppState::Running,
             config,
@@ -109,6 +125,8 @@ impl App {
             glow_brightness_buf: Vec::with_capacity(
                 usize::from(canvas_width) * usize::from(canvas_height),
             ),
+            presets,
+            current_preset_idx: 0,
             #[cfg(feature = "video")]
             video_cmd_tx,
             audio_cmd_tx,
@@ -257,7 +275,7 @@ impl App {
                 KeyCode::Char('q' | '?' | ' ') | KeyCode::Esc => self.handle_navigation_key(code),
                 KeyCode::Tab
                 | KeyCode::Char(
-                    '1'..='5'
+                    '1'..='8'
                     | 'd'
                     | 'D'
                     | 'c'
@@ -274,7 +292,10 @@ impl App {
                     | 'a'
                     | 'm'
                     | 'b'
-                    | 'x',
+                    | 'x'
+                    | 'v'
+                    | 'p'
+                    | 'P',
                 ) => self.handle_render_key(code),
                 KeyCode::Char('f' | 'F' | 'g' | 'G') => self.handle_effect_key(code),
                 KeyCode::Up | KeyCode::Down | KeyCode::Left | KeyCode::Right => {
@@ -343,6 +364,9 @@ impl App {
             KeyCode::Char('3') => self.set_charset(2, charset::CHARSET_FULL),
             KeyCode::Char('4') => self.set_charset(3, charset::CHARSET_BLOCKS),
             KeyCode::Char('5') => self.set_charset(4, charset::CHARSET_MINIMAL),
+            KeyCode::Char('6') => self.set_charset(5, charset::CHARSET_GLITCH_1),
+            KeyCode::Char('7') => self.set_charset(6, charset::CHARSET_GLITCH_2),
+            KeyCode::Char('8') => self.set_charset(7, charset::CHARSET_DIGITAL),
             KeyCode::Char('d') => {
                 self.toggle_config(|c| c.density_scale = (c.density_scale - 0.25).max(0.25));
             }
@@ -395,6 +419,12 @@ impl App {
                 // Forcer le recalcul de la taille des buffers au prochain tour
                 self.terminal_size = (0, 0);
             }
+            KeyCode::Char('v') => {
+                self.toggle_config(|c| c.show_spectrum = !c.show_spectrum);
+                self.terminal_size = (0, 0); // recalcul layout
+            }
+            KeyCode::Char('p') => self.cycle_preset(true),
+            KeyCode::Char('P') => self.cycle_preset(false),
             _ => {}
         }
     }
@@ -511,7 +541,7 @@ impl App {
                 (new_size.0, new_size.1)
             } else {
                 let sidebar_width = 20u16;
-                let spectrum_height = 3u16;
+                let spectrum_height = if config.show_spectrum { 3u16 } else { 0u16 };
                 (
                     new_size.0.saturating_sub(sidebar_width),
                     new_size.1.saturating_sub(spectrum_height),
@@ -559,5 +589,39 @@ impl App {
             log::debug!("Terminal resized to {canvas_width}×{canvas_height}");
         }
         Ok(())
+    }
+
+    /// Applique le live preset engine.
+    fn cycle_preset(&mut self, forward: bool) {
+        if self.presets.is_empty() {
+            log::warn!("Aucun preset trouvé dans config/presets/");
+            return;
+        }
+
+        if forward {
+            self.current_preset_idx = (self.current_preset_idx + 1) % self.presets.len();
+        } else if self.current_preset_idx == 0 {
+            self.current_preset_idx = self.presets.len() - 1;
+        } else {
+            self.current_preset_idx -= 1;
+        }
+
+        let path = &self.presets[self.current_preset_idx];
+        match af_core::config::load_config(path) {
+            Ok(mut new_cfg) => {
+                // Conserver l'état de l'interface qui n'est pas censé sauter avec le preset visuel.
+                let old_cfg = self.config.load();
+                new_cfg.fullscreen = old_cfg.fullscreen;
+                new_cfg.show_spectrum = old_cfg.show_spectrum;
+                
+                self.config.store(Arc::new(new_cfg));
+                self.sidebar_dirty = true;
+                self.terminal_size = (0, 0); // Force redraw / reallocation au cas où le mode de rendu (Braille/Ascii) ait changé.
+                log::info!("Preset chargé à vif : {}", path.display());
+            }
+            Err(e) => {
+                log::error!("Erreur de chargement du glitch preset : {e}");
+            }
+        }
     }
 }

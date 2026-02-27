@@ -73,6 +73,8 @@ pub struct RenderConfig {
     // === UI ===
     /// Mode plein écran exclusif (sans sidebar/spectrum).
     pub fullscreen: bool,
+    /// Afficher le spectre audio sous le visualiseur (si pas en fullscreen).
+    pub show_spectrum: bool,
 }
 
 /// A single audio-to-visual parameter mapping.
@@ -204,6 +206,7 @@ impl Default for RenderConfig {
             glow_intensity: 0.5,
             target_fps: 30,
             fullscreen: false,
+            show_spectrum: true,
         }
     }
 }
@@ -237,6 +240,7 @@ struct RenderSection {
     glow_intensity: Option<f32>,
     target_fps: Option<u32>,
     fullscreen: Option<bool>,
+    show_spectrum: Option<bool>,
 }
 
 /// Audio section of the TOML config, all fields optional.
@@ -324,6 +328,9 @@ pub fn load_config(path: &Path) -> Result<RenderConfig> {
     }
     if let Some(v) = r.fullscreen {
         config.fullscreen = v;
+    }
+    if let Some(v) = r.show_spectrum {
+        config.show_spectrum = v;
     }
 
     if let Some(a) = file.audio {

@@ -1,0 +1,12 @@
+[render]
+render_mode = "Ascii"
+charset_index = 1
+color_enabled = false
+density_scale = 1.0
+glow_intensity = 0.0
+fade_decay = 0.0
+edge_threshold = 0.0
+
+[audio]
+smoothing = 0.7
+sensitivity = 1.0

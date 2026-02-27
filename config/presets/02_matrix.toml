@@ -1,0 +1,13 @@
+[render]
+render_mode = "Ascii"
+charset_index = 7
+color_enabled = true
+color_mode = "HsvBright"
+density_scale = 1.0
+glow_intensity = 0.2
+fade_decay = 0.8
+audio_sensitivity = 2.0
+edge_threshold = 0.0
+
+[audio]
+smoothing = 0.5

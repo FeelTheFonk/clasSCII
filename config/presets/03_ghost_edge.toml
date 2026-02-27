@@ -1,0 +1,15 @@
+[render]
+render_mode = "Quadrant"
+charset_index = 2
+invert = true
+color_enabled = true
+color_mode = "HsvBright"
+density_scale = 1.0
+edge_threshold = 0.2
+edge_mix = 1.0
+glow_intensity = 0.8
+fade_decay = 0.9
+
+[audio]
+smoothing = 0.7
+sensitivity = 1.2

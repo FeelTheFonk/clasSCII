@@ -1,0 +1,13 @@
+[render]
+render_mode = "Braille"
+charset_index = 0
+color_enabled = true
+color_mode = "HsvBright"
+density_scale = 1.0
+glow_intensity = 1.5
+fade_decay = 0.6
+audio_sensitivity = 1.5
+edge_threshold = 0.0
+
+[audio]
+smoothing = 0.8

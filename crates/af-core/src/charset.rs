@@ -7,13 +7,22 @@ pub const CHARSET_STANDARD: &str =
 
 /// 70 caractères — Paul Bourke, résolution maximale (inversé: dense→clair).
 pub const CHARSET_FULL: &str =
-    "$@B%8&WM#*oahkbdpqwmZO0QLCJUYXzcvunxrjft/\\|()1{}[]?-_+~<>i!lI;:,\"^`'. ";
+    " $@B%8&WM#*oahkbdpqwmZO0QLCJUYXzcvunxrjft/\\|()1{}[]?-_+~<>i!lI;:,\"^`'.";
 
 /// Blocs Unicode — pseudo-pixels.
 pub const CHARSET_BLOCKS: &str = " ░▒▓█";
 
 /// Minimal — haut contraste.
 pub const CHARSET_MINIMAL: &str = " .:░▒▓█";
+
+/// Glitch 1 — contraste brutal organique.
+pub const CHARSET_GLITCH_1: &str = " .°*O0@#&%";
+
+/// Glitch 2 — barres de visualisation de spectre / data.
+pub const CHARSET_GLITCH_2: &str = " ▂▃▄▅▆▇█";
+
+/// Digital Matrix — purisme binaire et cryptique.
+pub const CHARSET_DIGITAL: &str = " 01";
 
 /// Lookup table mapping luminance [0..255] → character.
 ///
