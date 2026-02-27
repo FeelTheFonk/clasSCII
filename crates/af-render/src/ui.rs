@@ -40,28 +40,35 @@ pub fn draw(
 ) {
     let area = frame.area();
 
-    // Horizontal split: [canvas | sidebar(20)]
-    let sidebar_width = 20u16;
-    let h_chunks =
-        Layout::horizontal([Constraint::Min(40), Constraint::Length(sidebar_width)]).split(area);
+    // Si le mode plein écran exclusif est activé, ne rendre que le canevas ASCII
+    if config.fullscreen {
+        canvas::render_grid(frame.buffer_mut(), area, grid);
+    } else {
+        // Horizontal split: [canvas | sidebar(20)]
+        let sidebar_width = 20u16;
+        let h_chunks =
+            Layout::horizontal([Constraint::Min(40), Constraint::Length(sidebar_width)])
+                .split(area);
 
-    // Vertical split of left panel: [canvas | spectrum(3)]
-    let v_chunks =
-        Layout::vertical([Constraint::Min(10), Constraint::Length(3)]).split(h_chunks[0]);
+        // Vertical split of left panel: [canvas | spectrum(3)]
+        let v_chunks =
+            Layout::vertical([Constraint::Min(10), Constraint::Length(3)]).split(h_chunks[0]);
 
-    // === Canvas ===
-    let canvas_area = v_chunks[0];
-    canvas::render_grid(frame.buffer_mut(), canvas_area, grid);
+        // === Canvas ===
+        let canvas_area = v_chunks[0];
+        canvas::render_grid(frame.buffer_mut(), canvas_area, grid);
 
-    // === Spectrum bar ===
-    let spectrum_area = v_chunks[1];
-    draw_spectrum(frame, spectrum_area, audio);
+        // === Spectrum bar ===
+        let spectrum_area = v_chunks[1];
+        draw_spectrum(frame, spectrum_area, audio);
 
-    // === Sidebar ===
-    let sidebar_area = h_chunks[1];
-    draw_sidebar(frame, sidebar_area, config, audio, fps_counter, state);
+        // === Sidebar ===
+        let sidebar_area = h_chunks[1];
+        draw_sidebar(frame, sidebar_area, config, audio, fps_counter, state);
+    }
 
     // === Help overlay ===
+    // Force draw help even in fullscreen if toggled
     if *state == RenderState::Help {
         draw_help_overlay(frame, area);
     }
@@ -245,6 +252,7 @@ fn draw_help_overlay(frame: &mut Frame, area: Rect) {
         Line::from(" s        Toggle shapes"),
         Line::from(" ↑/↓      Audio sensitivity"),
         Line::from(" ←/→      Seek ±5s"),
+        Line::from(" x        Toggle fullscreen"),
         Line::from(" ?        Toggle help"),
         Line::from(""),
         Line::from(Span::styled(

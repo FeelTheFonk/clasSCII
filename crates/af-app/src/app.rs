@@ -273,7 +273,8 @@ impl App {
                     | 's'
                     | 'a'
                     | 'm'
-                    | 'b',
+                    | 'b'
+                    | 'x',
                 ) => self.handle_render_key(code),
                 KeyCode::Char('f' | 'F' | 'g' | 'G') => self.handle_effect_key(code),
                 KeyCode::Up | KeyCode::Down | KeyCode::Left | KeyCode::Right => {
@@ -389,6 +390,11 @@ impl App {
                     BgStyle::Transparent => BgStyle::Black,
                 };
             }),
+            KeyCode::Char('x') => {
+                self.toggle_config(|c| c.fullscreen = !c.fullscreen);
+                // Forcer le recalcul de la taille des buffers au prochain tour
+                self.terminal_size = (0, 0);
+            }
             _ => {}
         }
     }
@@ -499,16 +505,23 @@ impl App {
         if new_size != self.terminal_size {
             self.terminal_size = new_size;
 
-            let sidebar_width = 20u16;
-            let spectrum_height = 3u16;
-            let canvas_width = new_size.0.saturating_sub(sidebar_width);
-            let canvas_height = new_size.1.saturating_sub(spectrum_height);
+            let config = self.config.load();
+
+            let (canvas_width, canvas_height) = if config.fullscreen {
+                (new_size.0, new_size.1)
+            } else {
+                let sidebar_width = 20u16;
+                let spectrum_height = 3u16;
+                (
+                    new_size.0.saturating_sub(sidebar_width),
+                    new_size.1.saturating_sub(spectrum_height),
+                )
+            };
 
             // Réallouer la grille ASCII (rare, OK d'allouer ici)
             self.grid = AsciiGrid::new(canvas_width, canvas_height);
             self.prev_grid = AsciiGrid::new(canvas_width, canvas_height);
 
-            let config = self.config.load();
             let density = config.density_scale.clamp(0.25, 4.0);
             let (pixel_w, pixel_h) = match config.render_mode {
                 RenderMode::Ascii => (

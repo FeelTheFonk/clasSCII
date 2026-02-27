@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 /// let config = RenderConfig::default();
 /// assert_eq!(config.target_fps, 30);
 /// ```
+#[allow(clippy::struct_excessive_bools)]
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct RenderConfig {
     // === Mode de rendu ===
@@ -68,6 +69,10 @@ pub struct RenderConfig {
     // === Performance ===
     /// FPS cible. 30 ou 60.
     pub target_fps: u32,
+
+    // === UI ===
+    /// Mode plein écran exclusif (sans sidebar/spectrum).
+    pub fullscreen: bool,
 }
 
 /// A single audio-to-visual parameter mapping.
@@ -198,6 +203,7 @@ impl Default for RenderConfig {
             fade_decay: 0.3,
             glow_intensity: 0.5,
             target_fps: 30,
+            fullscreen: false,
         }
     }
 }
@@ -230,6 +236,7 @@ struct RenderSection {
     fade_decay: Option<f32>,
     glow_intensity: Option<f32>,
     target_fps: Option<u32>,
+    fullscreen: Option<bool>,
 }
 
 /// Audio section of the TOML config, all fields optional.
@@ -314,6 +321,9 @@ pub fn load_config(path: &Path) -> Result<RenderConfig> {
     }
     if let Some(v) = r.target_fps {
         config.target_fps = v;
+    }
+    if let Some(v) = r.fullscreen {
+        config.fullscreen = v;
     }
 
     if let Some(a) = file.audio {
