@@ -26,20 +26,19 @@ flume = { workspace = true }
 crossterm = { workspace = true }
 ratatui = { workspace = true }
 notify = { workspace = true }
-ctrlc = { workspace = true }
 rfd = { workspace = true }
-midir = { workspace = true, optional = true }
-rand = { version = "0.10.0", features = ["std"] }
-chrono = "0.4.44"
+fastrand = "2"
 
 [features]
 default = ["image-source"]
 image-source = ["af-source/image-source"]
-full = ["video", "webcam", "procedural", "midi"]
+full = ["video", "webcam", "procedural"]
 video = ["af-source/video"]
 webcam = ["af-source/webcam"]
 procedural = ["af-source/procedural"]
-midi = ["dep:midir"]
+
+[build-dependencies]
+winresource = "0.1"
 
 [lints]
 workspace = true

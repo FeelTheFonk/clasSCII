@@ -62,7 +62,7 @@ classcii --video path/to/video.mp4 --audio path/to/track.mp3
 
 # Configuration overrides
 classcii --image photo.jpg --mode braille --fps 60
-classcii --image photo.jpg --preset psychedelic
+classcii --image photo.jpg --preset 07_neon_abyss
 ```
 
 ### Batch Export Mode (Headless)
@@ -75,7 +75,7 @@ classcii --batch-folder ./media/
 
 # Manual specifications
 classcii --batch-folder ./media/ --audio track.mp3 --batch-out output.mp4 --fps 60
-classcii --batch-folder ./media/ --preset aggressive
+classcii --batch-folder ./media/ --preset 02_matrix
 ```
 
 **Arguments** for batch mode:
@@ -134,7 +134,8 @@ classcii --batch-folder ./media/ --preset aggressive
 | `Space` | Pause / Resume engine |
 | `C` | Open Custom Charset Editor |
 | `A` | Open Audio Reactivity Mixer Panel |
-| `o` / `O` | Open popup menu: [F]ile or [D]irectory (Batch Export) |
+| `o` | Open visual file picker (image / video) |
+| `O` | Open audio file picker |
 | `p` / `P` | Cycle preset |
 | `x` | Toggle fullscreen |
 | `?` | Toggle help menu |
@@ -145,16 +146,16 @@ classcii --batch-folder ./media/ --preset aggressive
 Audio-reactive behavior is configured via `audio_mappings` in TOML config files:
 
 ```toml
-[[audio_mappings]]
-source = "bass"           # Audio feature: rms, peak, sub_bass, bass, low_mid, mid,
-                          # high_mid, presence, brilliance, spectral_centroid,
-                          # spectral_flux, spectral_flatness, onset, beat_intensity,
-                          # beat_phase, bpm
+[[audio.mappings]]
+source = "bass"            # Audio feature: rms, peak, sub_bass, bass, low_mid, mid,
+                           # high_mid, presence, brilliance, spectral_centroid,
+                           # spectral_flux, spectral_flatness, onset, beat_intensity,
+                           # beat_phase, bpm
 target = "zalgo_intensity" # Visual target: edge_threshold, edge_mix, contrast,
                            # brightness, saturation, density_scale, invert,
                            # zalgo_intensity
-amount = 1.0              # Multiplier
-offset = 0.0              # Additive offset after multiplication
+amount = 1.0               # Multiplier
+offset = 0.0               # Additive offset after multiplication
 enabled = true
 ```
 
@@ -162,17 +163,22 @@ Multiple mappings can be defined simultaneously. In batch export mode, mappings 
 
 ## Presets
 
-Available in `config/presets/`:
+Available in `config/presets/`, selectable via `--preset <name>` or cycled live with `p`/`P`:
 
 | Preset | Description |
 |--------|-------------|
-| `ambient` | Soft, smooth, low reactivity |
-| `aggressive` | High contrast, strong onset response |
-| `minimal` | Simple ASCII, minimal effects |
-| `retro` | Classic terminal aesthetics |
-| `psychedelic` | Maximum saturation, wild color modes |
+| `01_cyber_braille` | Braille matrix, high contrast cyberpunk |
+| `02_matrix` | Classic Matrix digital rain aesthetic |
+| `03_ghost_edge` | Edge detection with spectral fade trails |
+| `04_pure_ascii` | Clean ASCII gradient, minimal effects |
+| `05_classic_gradient` | Standard luminance gradient mapping |
+| `06_vector_edges` | Edge-dominant, vector-style rendering |
+| `07_neon_abyss` | Neon colors, deep glow, high saturation |
+| `08_cyber_noise` | Glitch-heavy, noise-driven visuals |
+| `09_brutalism_mono` | Monochrome, high contrast brutalist style |
+| `10_ethereal_shape` | Shape matching, soft ethereal aesthetics |
 
-Usage: `classcii --image photo.jpg --preset psychedelic`
+Usage: `classcii --image photo.jpg --preset 02_matrix`
 
 ## Configuration
 

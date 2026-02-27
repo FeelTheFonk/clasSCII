@@ -14,8 +14,6 @@ use af_core::traits::Source;
 use af_export::muxer::{Mp4Muxer, mux_audio_video};
 #[cfg(feature = "video")]
 use af_export::rasterizer::Rasterizer;
-#[cfg(feature = "video")]
-use chrono::Local;
 
 #[cfg(feature = "video")]
 use af_source::folder_batch::FolderBatchSource;
@@ -76,7 +74,56 @@ pub fn run_batch_export(
                 .file_name()
                 .and_then(|n| n.to_str())
                 .unwrap_or("batch");
-            let timestamp = Local::now().format("%Y%m%d_%H%M%S");
+            let timestamp = {
+                use std::time::SystemTime;
+                let secs = SystemTime::now()
+                    .duration_since(SystemTime::UNIX_EPOCH)
+                    .map_or(0, |d| d.as_secs());
+                // UTC timestamp YYYYMMDD_HHMMSS (sufficient for unique naming)
+                let s = secs % 60;
+                let m = (secs / 60) % 60;
+                let h = (secs / 3600) % 24;
+                let days = secs / 86400;
+                // Approximate date from epoch days (sufficient precision for filenames)
+                let mut y = 1970u64;
+                let mut remaining = days;
+                loop {
+                    let days_in_year = if y % 4 == 0 && (y % 100 != 0 || y % 400 == 0) {
+                        366
+                    } else {
+                        365
+                    };
+                    if remaining < days_in_year {
+                        break;
+                    }
+                    remaining -= days_in_year;
+                    y += 1;
+                }
+                let leap = y % 4 == 0 && (y % 100 != 0 || y % 400 == 0);
+                let mdays: [u64; 12] = [
+                    31,
+                    if leap { 29 } else { 28 },
+                    31,
+                    30,
+                    31,
+                    30,
+                    31,
+                    31,
+                    30,
+                    31,
+                    30,
+                    31,
+                ];
+                let mut mo = 0u64;
+                for &md in &mdays {
+                    if remaining < md {
+                        break;
+                    }
+                    remaining -= md;
+                    mo += 1;
+                }
+                format!("{y}{:02}{:02}_{h:02}{m:02}{s:02}", mo + 1, remaining + 1)
+            };
             let default_name = format!("{folder_name}_{timestamp}.mp4");
             let mut p = std::env::current_dir()?;
             p.push(default_name);
@@ -148,7 +195,7 @@ pub fn run_batch_export(
                 source.next_media();
 
                 // 2. Cycle Render Mode (1 chance out of 4)
-                if rand::random::<f64>() < 0.25 {
+                if fastrand::f64() < 0.25 {
                     let modes = [
                         af_core::config::RenderMode::Ascii,
                         af_core::config::RenderMode::HalfBlock,
@@ -165,13 +212,13 @@ pub fn run_batch_export(
                 }
 
                 // 3. Spontaneous Invert Flash (1 chance out of 5)
-                if rand::random::<f64>() < 0.2 {
+                if fastrand::f64() < 0.2 {
                     let current = macro_invert_override.unwrap_or(frame_config.invert);
                     macro_invert_override = Some(!current);
                 }
 
                 // 4. Randomize Charset Rotations (1 chance out of 3)
-                if rand::random::<f64>() < 0.33 {
+                if fastrand::f64() < 0.33 {
                     let current_idx = macro_charset_override
                         .as_ref()
                         .map_or(frame_config.charset_index, |(i, _)| *i);

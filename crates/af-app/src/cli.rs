@@ -42,7 +42,7 @@ pub struct Cli {
     #[arg(long)]
     pub preset: Option<String>,
 
-    /// Mode de rendu initial : ascii, halfblock, braille, quadrant.
+    /// Mode de rendu initial : ascii, halfblock, braille, quadrant, sextant, octant.
     #[arg(long)]
     pub mode: Option<String>,
 

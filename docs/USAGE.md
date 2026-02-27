@@ -53,10 +53,10 @@ classcii --video movie.mp4
 
 | Command | Description | Default |
 |---------|-------------|---------|
-| `--mode <mode>` | Render mode: `ascii`, `halfblock`, `braille`, `quadrant` | config |
+| `--mode <mode>` | Render mode: `ascii`, `halfblock`, `braille`, `quadrant`, `sextant`, `octant` | config |
 | `--fps <n>` | Target framerate: `30` or `60` | config |
 | `--no-color` | Disable color output | off |
-| `--preset <name>` | Load a preset: `ambient`, `aggressive`, `minimal`, `retro`, `psychedelic` | — |
+| `--preset <name>` | Load a preset from `config/presets/` (e.g. `02_matrix`, `07_neon_abyss`) | — |
 | `-c, --config <file>` | Custom TOML config file | `config/default.toml` |
 | `--log-level <level>` | Logging: `error`, `warn`, `info`, `debug`, `trace` | `warn` |
 
@@ -79,8 +79,8 @@ classcii --video movie.mp4
 # Basic image display
 classcii --image sunset.png
 
-# Braille mode at 60fps with psychedelic preset and microphone
-classcii --image sunset.png --audio mic --mode braille --fps 60 --preset psychedelic
+# Braille mode at 60fps with neon preset and microphone
+classcii --image sunset.png --audio mic --mode braille --fps 60 --preset 07_neon_abyss
 
 # Video with external audio track
 classcii --video timelapse.mp4 --audio ambient.mp3
@@ -100,8 +100,8 @@ classcii --batch-folder ./photos/ --audio deep_house.mp3 --batch-out render.mp4
 # Fully automatic (auto-discovers audio in folder, auto-generates output name)
 classcii --batch-folder ./my_media/ 
 
-# 60fps with aggressive preset
-classcii --batch-folder ./media/ --audio track.flac --fps 60 --preset aggressive
+# 60fps with matrix preset
+classcii --batch-folder ./media/ --audio track.flac --fps 60 --preset 02_matrix
 ```
 
 **How it works (Generative Clip Maker):**
@@ -129,7 +129,7 @@ classcii --batch-folder ./media/ --audio track.flac --fps 60 --preset aggressive
 ### Render Mode
 | Key | Action |
 |-----|--------|
-| `Tab` | Cycle: Ascii → HalfBlock → Braille → Quadrant |
+| `Tab` | Cycle: Ascii → HalfBlock → Braille → Quadrant → Sextant → Octant |
 | `1`–`0` | Select built-in charset |
 | `c` | Toggle color |
 | `i` | Invert luminance |
@@ -163,7 +163,8 @@ classcii --batch-folder ./media/ --audio track.flac --fps 60 --preset aggressive
 |-----|--------|
 | `C` | Custom charset editor |
 | `A` | Audio reactivity mixer |
-| `o` / `O` | Open popup menu: [F]ile or [D]irectory (Batch Export) |
+| `o` | Open visual file picker (image / video) |
+| `O` | Open audio file picker |
 | `p` / `P` | Cycle preset |
 
 ---
@@ -173,7 +174,8 @@ classcii --batch-folder ./media/ --audio track.flac --fps 60 --preset aggressive
 ### Minimal Config
 
 ```toml
-render_mode = "ascii"
+[render]
+render_mode = "Ascii"
 charset = " .:-=+*#%@"
 invert = false
 color_enabled = true
@@ -184,30 +186,32 @@ contrast = 1.0
 brightness = 0.0
 saturation = 1.0
 target_fps = 30
-audio_smoothing = 0.3
-audio_sensitivity = 1.0
+
+[audio]
+smoothing = 0.3
+sensitivity = 1.0
 ```
 
 ### Audio Mappings
 
-Control which audio features drive which visual parameters:
+Control which audio features drive which visual parameters. Mappings are defined inside the `[audio]` section:
 
 ```toml
-[[audio_mappings]]
+[[audio.mappings]]
 source = "bass"
 target = "contrast"
 amount = 0.5
 offset = 0.0
 enabled = true
 
-[[audio_mappings]]
+[[audio.mappings]]
 source = "spectral_flux"
 target = "edge_threshold"
 amount = 1.0
 offset = 0.0
 enabled = true
 
-[[audio_mappings]]
+[[audio.mappings]]
 source = "onset"
 target = "invert"
 amount = 1.0
@@ -247,22 +251,30 @@ enabled = true
 | `saturation` | 0.0–2.0 | Color saturation |
 | `density_scale` | 0.25–4.0 | Character density |
 | `invert` | toggle | Flip luminance if > 0.5 |
+| `zalgo_intensity` | 0.0–1.0 | Zalgo diacritics distortion intensity |
 
 ---
 
 ## Presets
 
+Available in `config/presets/`, cycled live with `p`/`P`:
+
 | Preset | Style |
 |--------|-------|
-| `ambient` | Smooth, low reactivity, soft gradients |
-| `aggressive` | High contrast, rapid onset response, sharp edges |
-| `minimal` | Simple ASCII, minimal effects, clean look |
-| `retro` | Classic terminal aesthetics, green-on-black feel |
-| `psychedelic` | Maximum saturation, wild color cycling, intense glow |
+| `01_cyber_braille` | Braille matrix, high contrast cyberpunk |
+| `02_matrix` | Classic Matrix digital rain aesthetic |
+| `03_ghost_edge` | Edge detection with spectral fade trails |
+| `04_pure_ascii` | Clean ASCII gradient, minimal effects |
+| `05_classic_gradient` | Standard luminance gradient mapping |
+| `06_vector_edges` | Edge-dominant, vector-style rendering |
+| `07_neon_abyss` | Neon colors, deep glow, high saturation |
+| `08_cyber_noise` | Glitch-heavy, noise-driven visuals |
+| `09_brutalism_mono` | Monochrome, high contrast brutalist style |
+| `10_ethereal_shape` | Shape matching, soft ethereal aesthetics |
 
 ```bash
-classcii --image photo.jpg --preset psychedelic
-classcii --video clip.mp4 --preset aggressive --audio mic
+classcii --image photo.jpg --preset 07_neon_abyss
+classcii --video clip.mp4 --preset 02_matrix --audio mic
 ```
 
 ---

@@ -13,7 +13,6 @@ symphonia = { workspace = true }
 rtrb = { workspace = true }
 triple_buffer = { workspace = true }
 anyhow = { workspace = true }
-thiserror = { workspace = true }
 log = { workspace = true }
 flume = { workspace = true }
 

@@ -141,7 +141,7 @@ fn resolve_config(cli: &cli::Cli) -> Result<af_core::config::RenderConfig> {
             af_core::config::load_config(&path)
         } else {
             anyhow::bail!(
-                "Preset inconnu : {name}. Disponibles : ambient, aggressive, minimal, retro, psychedelic"
+                "Preset inconnu : {name}. Voir config/presets/ (ex: 01_cyber_braille, 02_matrix, 07_neon_abyss)"
             );
         }
     } else if cli.config.exists() {
