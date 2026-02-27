@@ -1,6 +1,7 @@
 use af_core::charset::LuminanceLut;
 use af_core::config::{BgStyle, RenderConfig, RenderMode};
 use af_core::frame::{AsciiGrid, AudioFeatures, FrameBuffer};
+use rayon::prelude::*;
 
 use crate::color_map;
 use crate::shape_match::ShapeMatcher;
@@ -84,81 +85,81 @@ impl Compositor {
         let edge_enabled = config.edge_threshold > 0.0 && config.edge_mix > 0.0;
         let apply_bg = matches!(config.bg_style, BgStyle::SourceDim);
 
-        for cy in 0..grid.height {
-            for cx in 0..grid.width {
-                let px = u32::from(cx) * frame.width / u32::from(grid.width).max(1);
-                let py = u32::from(cy) * frame.height / u32::from(grid.height).max(1);
-                let px = px.min(frame.width.saturating_sub(1));
-                let py = py.min(frame.height.saturating_sub(1));
+        grid.cells
+            .par_chunks_mut(grid.width as usize)
+            .enumerate()
+            .for_each(|(cy, row)| {
+                for (cx, cell) in row.iter_mut().enumerate() {
+                    let px = (cx as u32) * frame.width / u32::from(grid.width).max(1);
+                    let py = (cy as u32) * frame.height / u32::from(grid.height).max(1);
+                    let px = px.min(frame.width.saturating_sub(1));
+                    let py = py.min(frame.height.saturating_sub(1));
 
-                let (r, g, b, _) = frame.pixel(px, py);
-                let mut cell = *grid.get(cx, cy);
+                    let (r, g, b, _) = frame.pixel(px, py);
 
-                // A. Base Ascii (Luminance + Couleur Directe)
-                if is_ascii {
-                    let mut lum = frame.luminance(px, py);
-                    if config.invert {
-                        lum = 255 - lum;
-                    }
-                    let val = f32::from(lum);
-                    let adjusted =
-                        (val - 128.0) * config.contrast + 128.0 + config.brightness * 255.0;
+                    // A. Base Ascii (Luminance + Couleur Directe)
+                    if is_ascii {
+                        let mut lum = frame.luminance(px, py);
+                        if config.invert {
+                            lum = 255 - lum;
+                        }
+                        let val = f32::from(lum);
+                        let adjusted =
+                            (val - 128.0) * config.contrast + 128.0 + config.brightness * 255.0;
 
-                    // Shape matching or standard LUT
-                    cell.ch = if use_shape {
-                        if let Some(ref matcher) = self.shape_matcher {
-                            let mut block = [0u8; 25];
-                            for dy in 0..5u32 {
-                                for dx in 0..5u32 {
-                                    let sx = (px + dx).min(frame.width.saturating_sub(1));
-                                    let sy = (py + dy).min(frame.height.saturating_sub(1));
-                                    block[(dy * 5 + dx) as usize] = frame.luminance(sx, sy);
+                        // Shape matching or standard LUT
+                        cell.ch = if use_shape {
+                            if let Some(ref matcher) = self.shape_matcher {
+                                let mut block = [0u8; 25];
+                                for dy in 0..5u32 {
+                                    for dx in 0..5u32 {
+                                        let sx = (px + dx).min(frame.width.saturating_sub(1));
+                                        let sy = (py + dy).min(frame.height.saturating_sub(1));
+                                        block[(dy * 5 + dx) as usize] = frame.luminance(sx, sy);
+                                    }
                                 }
+                                matcher.match_cell(&block)
+                            } else {
+                                self.lut.map(adjusted.clamp(0.0, 255.0) as u8)
                             }
-                            matcher.match_cell(&block)
                         } else {
                             self.lut.map(adjusted.clamp(0.0, 255.0) as u8)
-                        }
-                    } else {
-                        self.lut.map(adjusted.clamp(0.0, 255.0) as u8)
-                    };
+                        };
 
-                    if config.color_enabled {
-                        let (mr, mg, mb) =
-                            color_map::map_color(r, g, b, &config.color_mode, config.saturation);
-                        cell.fg = (mr, mg, mb);
-                    } else {
-                        cell.fg = (r, g, b);
-                    }
-                    cell.bg = match config.bg_style {
-                        BgStyle::Black | BgStyle::Transparent => (0, 0, 0),
-                        BgStyle::SourceDim => (r / 4, g / 4, b / 4),
-                    };
-                }
-
-                // B. Edge Blending
-                if edge_enabled {
-                    let (normalized_mag, angle) = crate::edge::detect_edge(frame, px, py);
-                    if normalized_mag > config.edge_threshold && (mix >= 1.0 || normalized_mag * mix > 0.5) {
-                        // En mode ASCII pur, on utilise le mapping directionnel asciify-them
-                        if is_ascii && !use_shape {
-                            cell.ch = crate::edge::ascii_edge_char(angle);
+                        if config.color_enabled {
+                            let (mr, mg, mb) =
+                                color_map::map_color(r, g, b, &config.color_mode, config.saturation);
+                            cell.fg = (mr, mg, mb);
                         } else {
-                            // Fallback pour les modes blocs ou si les shapes sont déjà actives
-                            let idx = ((normalized_mag * (edge_chars.len() - 1) as f32) as usize)
-                                .min(edge_chars.len() - 1);
-                            cell.ch = edge_chars[idx];
+                            cell.fg = (r, g, b);
+                        }
+                        cell.bg = match config.bg_style {
+                            BgStyle::Black | BgStyle::Transparent => (0, 0, 0),
+                            BgStyle::SourceDim => (r / 4, g / 4, b / 4),
+                        };
+                    }
+
+                    // B. Edge Blending
+                    if edge_enabled {
+                        let (normalized_mag, angle) = crate::edge::detect_edge(frame, px, py);
+                        if normalized_mag > config.edge_threshold && (mix >= 1.0 || normalized_mag * mix > 0.5) {
+                            // En mode ASCII pur, on utilise le mapping directionnel asciify-them
+                            if is_ascii && !use_shape {
+                                cell.ch = crate::edge::ascii_edge_char(angle);
+                            } else {
+                                // Fallback pour les modes blocs ou si les shapes sont déjà actives
+                                let idx = ((normalized_mag * (edge_chars.len() - 1) as f32) as usize)
+                                    .min(edge_chars.len() - 1);
+                                cell.ch = edge_chars[idx];
+                            }
                         }
                     }
-                }
 
-                // C. Override Bg Style (for non-ascii modes that don't do it)
-                if !is_ascii && apply_bg {
-                    cell.bg = (r / 4, g / 4, b / 4);
+                    // C. Override Bg Style (for non-ascii modes that don't do it)
+                    if !is_ascii && apply_bg {
+                        cell.bg = (r / 4, g / 4, b / 4);
+                    }
                 }
-
-                grid.set(cx, cy, cell);
-            }
-        }
+            });
     }
 }

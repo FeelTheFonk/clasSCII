@@ -1,5 +1,6 @@
 use af_core::config::RenderConfig;
 use af_core::frame::{AsciiCell, AsciiGrid, FrameBuffer};
+use rayon::prelude::*;
 
 /// Process frame in half-block mode (▄ character).
 ///
@@ -21,25 +22,27 @@ pub fn process_halfblock(frame: &FrameBuffer, _config: &RenderConfig, grid: &mut
     let pixel_h = u32::from(grid.height) * 2;
     let pixel_w = u32::from(grid.width);
 
-    for cy in 0..grid.height {
-        for cx in 0..grid.width {
-            let px = u32::from(cx) * frame.width / pixel_w.max(1);
-            let py_top = u32::from(cy) * 2 * frame.height / pixel_h.max(1);
-            let py_bot = (u32::from(cy) * 2 + 1) * frame.height / pixel_h.max(1);
+    grid.cells
+        .par_chunks_mut(pixel_w as usize)
+        .enumerate()
+        .for_each(|(cy, row)| {
+            for (cx, cell) in row.iter_mut().enumerate() {
+                let px = (cx as u32) * frame.width / pixel_w.max(1);
+                let py_top = (cy as u32) * 2 * frame.height / pixel_h.max(1);
+                let py_bot = ((cy as u32) * 2 + 1) * frame.height / pixel_h.max(1);
 
-            let px = px.min(frame.width.saturating_sub(1));
-            let py_top = py_top.min(frame.height.saturating_sub(1));
-            let py_bot = py_bot.min(frame.height.saturating_sub(1));
+                let px = px.min(frame.width.saturating_sub(1));
+                let py_top = py_top.min(frame.height.saturating_sub(1));
+                let py_bot = py_bot.min(frame.height.saturating_sub(1));
 
-            let (tr, tg, tb, _) = frame.pixel(px, py_top);
-            let (br, bg, bb, _) = frame.pixel(px, py_bot);
+                let (tr, tg, tb, _) = frame.pixel(px, py_top);
+                let (br, bg, bb, _) = frame.pixel(px, py_bot);
 
-            let cell = AsciiCell {
-                ch: '▄',
-                fg: (br, bg, bb), // Bottom pixel = fg
-                bg: (tr, tg, tb), // Top pixel = bg
-            };
-            grid.set(cx, cy, cell);
-        }
-    }
+                *cell = AsciiCell {
+                    ch: '▄',
+                    fg: (br, bg, bb), // Bottom pixel = fg
+                    bg: (tr, tg, tb), // Top pixel = bg
+                };
+            }
+        });
 }

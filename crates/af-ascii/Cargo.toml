@@ -8,6 +8,7 @@ license.workspace = true
 [dependencies]
 af-core = { path = "../af-core" }
 log = { workspace = true }
+rayon = { workspace = true }
 
 [lints]
 workspace = true

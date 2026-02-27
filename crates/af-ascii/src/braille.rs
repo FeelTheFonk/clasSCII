@@ -1,5 +1,6 @@
 use af_core::config::RenderConfig;
 use af_core::frame::{AsciiCell, AsciiGrid, FrameBuffer};
+use rayon::prelude::*;
 
 /// Braille base codepoint (U+2800).
 const BRAILLE_BASE: u32 = 0x2800;
@@ -56,84 +57,83 @@ pub fn process_braille(frame: &FrameBuffer, config: &RenderConfig, grid: &mut As
     let pixel_h = u32::from(grid.height) * 4;
     let threshold: u8 = 128;
 
-    for cy in 0..grid.height {
-        for cx in 0..grid.width {
-            let base_x = u32::from(cx) * 2 * frame.width / pixel_w.max(1);
-            let base_y = u32::from(cy) * 4 * frame.height / pixel_h.max(1);
+    grid.cells
+        .par_chunks_mut(grid.width as usize)
+        .enumerate()
+        .for_each(|(cy, row)| {
+            for (cx, cell) in row.iter_mut().enumerate() {
+                let base_x = (cx as u32) * 2 * frame.width / pixel_w.max(1);
+                let base_y = (cy as u32) * 4 * frame.height / pixel_h.max(1);
 
-            // Sample 2×4 block
-            // Column-major order: dots[0..3] = left column, dots[4..7] = right column
-            let mut dots = [false; 8];
-            let mut avg_r = 0u32;
-            let mut avg_g = 0u32;
-            let mut avg_b = 0u32;
-            let mut count = 0u32;
+                // Sample 2×4 block
+                // Column-major order: dots[0..3] = left column, dots[4..7] = right column
+                let mut dots = [false; 8];
+                let mut avg_r = 0u32;
+                let mut avg_g = 0u32;
+                let mut avg_b = 0u32;
+                let mut count = 0u32;
 
-            for dy in 0..4u32 {
-                for dx in 0..2u32 {
-                    let px = (base_x + dx * frame.width / pixel_w.max(1))
-                        .min(frame.width.saturating_sub(1));
-                    let py = (base_y + dy * frame.height / pixel_h.max(1))
-                        .min(frame.height.saturating_sub(1));
+                for dy in 0..4u32 {
+                    for dx in 0..2u32 {
+                        let px = (base_x + dx * frame.width / pixel_w.max(1))
+                            .min(frame.width.saturating_sub(1));
+                        let py = (base_y + dy * frame.height / pixel_h.max(1))
+                            .min(frame.height.saturating_sub(1));
 
-                    let lum = frame.luminance(px, py);
-                    let (r, g, b, _) = frame.pixel(px, py);
+                        let lum = frame.luminance(px, py);
+                        let (r, g, b, _) = frame.pixel(px, py);
 
-                    // Braille dot ordering: column-major
-                    // Left column (dx=0): dots 1,2,3,7 → indices 0,1,2,6
-                    // Right column (dx=1): dots 4,5,6,8 → indices 3,4,5,7
-                    let dot_idx = if dx == 0 {
-                        match dy {
-                            0 => 0,
-                            1 => 1,
-                            2 => 2,
-                            _ => 6,
-                        }
-                    } else {
-                        match dy {
-                            0 => 3,
-                            1 => 4,
-                            2 => 5,
-                            _ => 7,
-                        }
-                    };
+                        // Braille dot ordering: column-major
+                        // Left column (dx=0): dots 1,2,3,7 → indices 0,1,2,6
+                        // Right column (dx=1): dots 4,5,6,8 → indices 3,4,5,7
+                        let dot_idx = if dx == 0 {
+                            match dy {
+                                0 => 0,
+                                1 => 1,
+                                2 => 2,
+                                _ => 6,
+                            }
+                        } else {
+                            match dy {
+                                0 => 3,
+                                1 => 4,
+                                2 => 5,
+                                _ => 7,
+                            }
+                        };
 
-                    let on = if config.invert {
-                        lum < threshold
-                    } else {
-                        lum > threshold
-                    };
-                    dots[dot_idx] = on;
+                        let on = if config.invert {
+                            lum < threshold
+                        } else {
+                            lum > threshold
+                        };
+                        dots[dot_idx] = on;
 
-                    avg_r += u32::from(r);
-                    avg_g += u32::from(g);
-                    avg_b += u32::from(b);
-                    count += 1;
+                        avg_r += u32::from(r);
+                        avg_g += u32::from(g);
+                        avg_b += u32::from(b);
+                        count += 1;
+                    }
                 }
-            }
 
-            let ch = encode_braille(dots);
-            let fg = if count > 0 {
-                (
-                    (avg_r / count) as u8,
-                    (avg_g / count) as u8,
-                    (avg_b / count) as u8,
-                )
-            } else {
-                (255, 255, 255)
-            };
+                let ch = encode_braille(dots);
+                let fg = if count > 0 {
+                    (
+                        (avg_r / count) as u8,
+                        (avg_g / count) as u8,
+                        (avg_b / count) as u8,
+                    )
+                } else {
+                    (255, 255, 255)
+                };
 
-            grid.set(
-                cx,
-                cy,
-                AsciiCell {
+                *cell = AsciiCell {
                     ch,
                     fg,
                     bg: (0, 0, 0),
-                },
-            );
-        }
-    }
+                };
+            }
+        });
 }
 
 #[cfg(test)]
