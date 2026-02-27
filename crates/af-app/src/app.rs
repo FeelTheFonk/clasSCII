@@ -1039,7 +1039,7 @@ impl App {
             println!("\n=== ASCIIFORGE BATCH EXPORT ===");
             println!("Target Folder: {}", folder.display());
 
-            let _config = (**self.config.load()).clone();
+            let config = (**self.config.load()).clone();
 
             #[cfg(feature = "video")]
             if let Err(e) = crate::batch::run_batch_export(&folder, None, None, config, 30) {

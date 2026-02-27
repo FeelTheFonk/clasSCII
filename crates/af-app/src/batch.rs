@@ -12,6 +12,7 @@ use af_core::frame::{AsciiGrid, FrameBuffer};
 use af_core::traits::Source;
 #[cfg(feature = "video")]
 use af_export::muxer::{Mp4Muxer, mux_audio_video};
+use chrono::Local;
 #[cfg(feature = "video")]
 use af_export::rasterizer::Rasterizer;
 
