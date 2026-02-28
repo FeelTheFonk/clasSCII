@@ -86,13 +86,43 @@ impl VirtualCamera {
                     let x_src_f = x_zoomed * cos_a - y_zoomed * sin_a + in_center_x;
                     let y_src_f = x_zoomed * sin_a + y_zoomed * cos_a + in_center_y;
 
-                    // Nearest neighbour rounding
-                    let x_src = x_src_f.round() as i32;
-                    let y_src = y_src_f.round() as i32;
-
                     let out_idx = (x_out * 4) as usize;
 
-                    // Bounds checking
+                    // Bilinear interpolation
+                    let x0 = x_src_f.floor() as i32;
+                    let y0 = y_src_f.floor() as i32;
+                    let x1 = x0 + 1;
+                    let y1 = y0 + 1;
+
+                    if x0 >= 0 && x1 < in_width && y0 >= 0 && y1 < in_height {
+                        let fx = x_src_f - x0 as f32;
+                        let fy = y_src_f - y0 as f32;
+                        let ifx = 1.0 - fx;
+                        let ify = 1.0 - fy;
+
+                        let w00 = ifx * ify;
+                        let w10 = fx * ify;
+                        let w01 = ifx * fy;
+                        let w11 = fx * fy;
+
+                        let i00 = (y0 as usize * in_stride) + (x0 as usize * 4);
+                        let i10 = i00 + 4;
+                        let i01 = i00 + in_stride;
+                        let i11 = i01 + 4;
+
+                        for c in 0..4 {
+                            row[out_idx + c] = (f32::from(in_data[i00 + c]) * w00
+                                + f32::from(in_data[i10 + c]) * w10
+                                + f32::from(in_data[i01 + c]) * w01
+                                + f32::from(in_data[i11 + c]) * w11)
+                                as u8;
+                        }
+                        continue;
+                    }
+
+                    // Edge fallback: nearest neighbor for border pixels
+                    let x_src = x_src_f.round() as i32;
+                    let y_src = y_src_f.round() as i32;
                     if x_src >= 0 && x_src < in_width && y_src >= 0 && y_src < in_height {
                         let in_idx = (y_src as usize * in_stride) + (x_src as usize * 4);
                         if in_idx + 3 < in_data.len() {

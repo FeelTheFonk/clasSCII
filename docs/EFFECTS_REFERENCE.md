@@ -199,7 +199,7 @@ Affine transformation applied to the source frame *before* ASCII conversion. Ope
 | Parameters | `camera_zoom_amplitude`, `camera_rotation`, `camera_pan_x`, `camera_pan_y` |
 | Ranges | 0.1–10.0 (zoom), any (rotation), −2.0–2.0 (pan) |
 | Defaults | 1.0, 0.0, 0.0, 0.0 |
-| Keybinds | `<`/`>` (zoom ±0.1), `,`/`.` (rotation ±0.05), `;`/`'` (pan X ±0.05) |
+| Keybinds | `<`/`>` (zoom ±0.1), `,`/`.` (rotation ±0.05), `;`/`'` (pan X ±0.05), `:`/`"` (pan Y ±0.05) |
 | Sidebar | Zoom, Rot, PanX, PanY |
 
 The camera applies a 2D affine transform (zoom, rotation, translation) to every pixel of the source frame using bilinear interpolation. This runs before any ASCII rasterization, so the effect is sub-pixel smooth.

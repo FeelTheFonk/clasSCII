@@ -26,7 +26,7 @@ checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 
 [[package]]
 name = "af-app"
-version = "0.5.5"
+version = "0.5.6"
 dependencies = [
  "af-ascii",
  "af-audio",
@@ -51,7 +51,7 @@ dependencies = [
 
 [[package]]
 name = "af-ascii"
-version = "0.5.5"
+version = "0.5.6"
 dependencies = [
  "af-core",
  "log",
@@ -60,7 +60,7 @@ dependencies = [
 
 [[package]]
 name = "af-audio"
-version = "0.5.5"
+version = "0.5.6"
 dependencies = [
  "af-core",
  "anyhow",
@@ -75,7 +75,7 @@ dependencies = [
 
 [[package]]
 name = "af-core"
-version = "0.5.5"
+version = "0.5.6"
 dependencies = [
  "anyhow",
  "log",
@@ -85,7 +85,7 @@ dependencies = [
 
 [[package]]
 name = "af-export"
-version = "0.5.5"
+version = "0.5.6"
 dependencies = [
  "ab_glyph",
  "af-core",
@@ -96,7 +96,7 @@ dependencies = [
 
 [[package]]
 name = "af-render"
-version = "0.5.5"
+version = "0.5.6"
 dependencies = [
  "af-core",
  "crossterm",
@@ -107,17 +107,15 @@ dependencies = [
 
 [[package]]
 name = "af-source"
-version = "0.5.5"
+version = "0.5.6"
 dependencies = [
  "af-core",
  "anyhow",
  "arc-swap",
  "fast_image_resize",
  "flume",
- "glam",
  "image",
  "log",
- "noise",
  "rayon",
 ]
 
@@ -1291,12 +1289,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "glam"
-version = "0.29.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8babf46d4c1c9d92deac9f7be466f76dfc4482b6452fc5024b5e8daf6ffeb3ee"
-
-[[package]]
 name = "hashbrown"
 version = "0.15.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1859,17 +1851,6 @@ dependencies = [
  "cfg_aliases",
  "libc",
  "memoffset",
-]
-
-[[package]]
-name = "noise"
-version = "0.9.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6da45c8333f2e152fc665d78a380be060eb84fad8ca4c9f7ac8ca29216cff0cc"
-dependencies = [
- "num-traits",
- "rand 0.8.5",
- "rand_xorshift",
 ]
 
 [[package]]
@@ -2448,15 +2429,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "76afc826de14238e6e8c374ddcc1fa19e374fd8dd986b0d2af0d02377261d83c"
 dependencies = [
  "getrandom 0.3.4",
-]
-
-[[package]]
-name = "rand_xorshift"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d25bf25ec5ae4a3f1b92f929810509a2f53d7dca2f50b794ff57e3face536c8f"
-dependencies = [
- "rand_core 0.6.4",
 ]
 
 [[package]]

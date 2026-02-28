@@ -5,13 +5,40 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.6] — 2026-02-28
+
+### Added
+- **Animated GIF support**: GIFs loaded via `--image` or file picker now play as looping animations with frame-accurate timing. Single-frame GIFs remain static. Batch export (`--batch-folder`) supports animated GIFs.
+- **Camera Pan Y keybind**: `:`/`"` control camera vertical panning (±0.05, range [-2.0, 2.0]).
+- **Camera bilinear interpolation**: Virtual camera now uses bilinear interpolation instead of nearest-neighbor, eliminating aliasing artifacts during zoom and rotation. Border pixels fall back to nearest-neighbor.
+
+### Fixed
+- **Sidebar width mismatch**: `app.rs` used width 20 while `ui.rs` used 24, wasting 4 columns of render computation every frame. Synchronized to 24.
+- **default.toml onset→invert ghost mapping**: Removed mapping that was documented as removed in v0.5.2 but still present in config file.
+- **default.toml missing camera fields**: Added `camera_zoom_amplitude`, `camera_rotation`, `camera_pan_x`, `camera_pan_y` to `[render]` section.
+- **Help overlay layout**: "Color FX" note moved to correct position (after Effects, before Camera). Pan Y entry added to Camera section.
+- **Creation overlay allocation**: Replaced per-frame `Vec` allocation with fixed-size `[10]` array.
+
+### Removed
+- **Dead dependencies**: Removed unused `noise` and `glam` from `af-source` and workspace `Cargo.toml`.
+
 ## [0.5.5] — 2026-02-28
 
 ### Added
 - **Lossless MP4 Export**: Muxer FFmpeg arguments updated from `-c:v libx264 -pix_fmt yuv444p` to `-c:v libx264rgb -pix_fmt rgb24` for mathematically perfect, sub-sampling free RGB rendering text output.
 - **Batch Export Scaling**: Exposed new `--export-scale <FLOAT>` CLI argument to override the `Rasterizer` default (16.0) for high-resolution 4K/8K offline rendering.
 - **Mandelbrot Continuous Math Field**: Implemented a zero-allocation `MandelbrotSource` procedural generator via `rayon` parallelism. Accessible via `--procedural mandelbrot`, exposing true infinite zoom.
-- **Virtual Reactive Camera**: Deeply integrated zero-allocation affine transform system in real-time (`af-app`) and offline (`batch.rs`). Added `camera_zoom_amplitude`, `camera_rotation`, `camera_pan_x`, `camera_pan_y` arrays to `RenderConfig` to bring advanced audio-reactive 2D visual manipulation without taxing CPU.
+- **Virtual Reactive Camera**: Deeply integrated zero-allocation affine transform system in real-time (`af-app`) and offline (`batch.rs`). Added `camera_zoom_amplitude`, `camera_rotation`, `camera_pan_x`, `camera_pan_y` to `RenderConfig`.
+- **6 artistic presets**: deep_zoom (12), breath (13), interference (14), noir (15), aurora (16), static (17). Total: 17 presets.
+- **Camera keybinds**: `</>` zoom, `,/.` rotation, `;/'` pan X. Sidebar Camera section. Help overlay Camera section.
+- **Camera in Creation Mode**: Psychedelic (rotation+zoom), Abstract (pan+rotation), Spectral (zoom+pan).
+- **Camera targets in generative.rs**: 4 camera targets for batch export audio-reactive camera.
+- **Rasterizer cache**: Sextant U+1FB00-U+1FB3B and Latin-1 Supplement ranges cached for batch export.
+
+### Fixed
+- **Sextant LUT**: Complete rewrite of `SEXTANT_LUT[64]` with correct Unicode mappings (U+1FB00-U+1FB3B). Indices 21/42 (absent damier patterns) mapped to U+2592 (▒).
+- **CLI docstring**: Procedural types corrected to "mandelbrot" only (was listing 4 non-existent types).
+- **Documentation harmonization**: Targets 14→18 across all docs, codec `libx264rgb`, procedural `mandelbrot` only.
 
 ## [0.5.4] — 2026-02-28
 

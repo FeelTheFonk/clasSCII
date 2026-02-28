@@ -11,7 +11,7 @@ use crate::image::load_image;
 use crate::video::{VideoInfo, probe_video, read_exact_or_eof, spawn_ffmpeg_pipe};
 
 /// Extensions image reconnues.
-const IMAGE_EXTS: &[&str] = &["png", "jpg", "jpeg"];
+const IMAGE_EXTS: &[&str] = &["png", "jpg", "jpeg", "gif"];
 
 /// Extensions vidéo reconnues (feature-gated).
 #[cfg(feature = "video")]
@@ -24,6 +24,7 @@ pub struct FolderBatchSource {
     current_idx: usize,
 
     current_image: Option<Arc<FrameBuffer>>,
+    current_gif: Option<crate::image::GifSource>,
 
     #[cfg(feature = "video")]
     video_child: Option<std::process::Child>,
@@ -61,6 +62,7 @@ impl FolderBatchSource {
             files,
             current_idx: 0,
             current_image: None,
+            current_gif: None,
             #[cfg(feature = "video")]
             video_child: None,
             #[cfg(feature = "video")]
@@ -120,6 +122,7 @@ impl FolderBatchSource {
         let path = &self.files[self.current_idx];
 
         self.current_image = None;
+        self.current_gif = None;
 
         #[cfg(feature = "video")]
         {
@@ -136,6 +139,16 @@ impl FolderBatchSource {
             .and_then(|s| s.to_str())
             .unwrap_or("")
             .to_lowercase();
+        if ext == "gif" {
+            match crate::image::GifSource::try_new(path) {
+                Ok(Some(gif)) => {
+                    self.current_gif = Some(gif);
+                    return;
+                }
+                Ok(None) => { /* single-frame GIF, fall through to load_image */ }
+                Err(e) => log::warn!("FolderBatchSource: GIF decode error: {e}"),
+            }
+        }
         if IMAGE_EXTS.contains(&ext.as_str()) {
             if let Ok(fb) = load_image(path.to_str().unwrap_or("")) {
                 self.current_image = Some(Arc::new(fb));
@@ -175,6 +188,11 @@ impl Source for FolderBatchSource {
         // Proportional clip duration: force advance when budget exhausted
         if self.clip_frame_count >= self.max_clip_frames {
             self.next_media();
+        }
+
+        if let Some(gif) = &mut self.current_gif {
+            self.clip_frame_count += 1;
+            return gif.next_frame();
         }
 
         if let Some(img) = &self.current_image {
@@ -235,6 +253,9 @@ impl Source for FolderBatchSource {
     }
 
     fn native_size(&self) -> (u32, u32) {
+        if let Some(gif) = &self.current_gif {
+            return gif.native_size();
+        }
         if let Some(img) = &self.current_image {
             return (img.width, img.height);
         }

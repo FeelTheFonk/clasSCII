@@ -102,7 +102,7 @@ classcii --batch-folder ./media/ --preset 02_matrix
 
 | Flag | Description | Default |
 |------|-------------|---------|
-| `--image <PATH>` | Source: static image (PNG, JPEG, BMP, GIF) | — |
+| `--image <PATH>` | Source: static image or animated GIF (PNG, JPEG, BMP, GIF, TIFF, WebP) | — |
 | `--video <PATH>` | Source: video file (requires `--features video`) | — |
 | `--procedural <TYPE>` | Source: generator (`mandelbrot`) | — |
 | `--audio <PATH\|mic>` | Audio source: file path or `mic` for microphone | — |
@@ -146,6 +146,7 @@ classcii --batch-folder ./media/ --preset 02_matrix
 | `<` / `>` | Adjust camera zoom |
 | `,` / `.` | Adjust camera rotation |
 | `;` / `'` | Adjust camera pan X |
+| `:` / `"` | Adjust camera pan Y |
 | `v` | Toggle spectrum display |
 | `n` | Cycle dither mode (Bayer8x8 / BlueNoise16 / Off) |
 | `↑` / `↓` | Adjust general audio sensitivity |

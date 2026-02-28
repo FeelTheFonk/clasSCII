@@ -74,6 +74,31 @@ pub fn start_source(
 ) -> anyhow::Result<SourceResult> {
     let _ = &clock; // Utilisé uniquement avec feature="video"
     if let Some(ref path) = cli.image {
+        // Animated GIF detection
+        let is_gif = path
+            .extension()
+            .and_then(|e| e.to_str())
+            .is_some_and(|e| e.eq_ignore_ascii_case("gif"));
+        if is_gif && let Some(gif) = af_source::image::GifSource::try_new(path)? {
+            let (frame_tx, frame_rx) = flume::bounded(3);
+            std::thread::spawn(move || {
+                let mut source = gif;
+                loop {
+                    if let Some(frame) = af_core::traits::Source::next_frame(&mut source)
+                        && frame_tx.send(frame).is_err()
+                    {
+                        break;
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(1));
+                }
+            });
+            let initial_frame = frame_rx.recv().ok();
+            #[cfg(feature = "video")]
+            return Ok((initial_frame, Some(frame_rx), None));
+            #[cfg(not(feature = "video"))]
+            return Ok((initial_frame, Some(frame_rx)));
+        }
+        // Static image (or single-frame GIF)
         let mut source = af_source::image::ImageSource::new(path)?;
         let frame = af_core::traits::Source::next_frame(&mut source);
         #[cfg(feature = "video")]

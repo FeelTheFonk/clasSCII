@@ -170,7 +170,7 @@ impl App {
         audio_cmd_tx: Option<flume::Sender<AudioCommand>>,
     ) -> Result<Self> {
         let terminal_size = crossterm::terminal::size()?;
-        let canvas_width = terminal_size.0.saturating_sub(20);
+        let canvas_width = terminal_size.0.saturating_sub(24);
         let canvas_height = terminal_size.1.saturating_sub(3);
         let initial_charset = config.load().charset.clone();
 
@@ -504,15 +504,18 @@ impl App {
             };
 
             let layout_creation = if state == RenderState::CreationMode {
-                let effects: Vec<(&str, f32, f32)> = (0..crate::creation::NUM_EFFECTS)
-                    .map(|i| {
-                        (
-                            crate::creation::EFFECT_NAMES[i],
-                            self.creation_engine.effect_value(i, &render_config),
-                            self.creation_engine.effect_max(i),
-                        )
-                    })
-                    .collect();
+                let mut effects = [("", 0.0f32, 0.0f32); 10];
+                for (i, slot) in effects
+                    .iter_mut()
+                    .enumerate()
+                    .take(crate::creation::NUM_EFFECTS)
+                {
+                    *slot = (
+                        crate::creation::EFFECT_NAMES[i],
+                        self.creation_engine.effect_value(i, &render_config),
+                        self.creation_engine.effect_max(i),
+                    );
+                }
                 Some(af_render::ui::CreationOverlayData {
                     auto_mode: self.creation_engine.auto_mode,
                     master_intensity: self.creation_engine.master_intensity,
@@ -641,7 +644,7 @@ impl App {
                 KeyCode::Char(
                     'f' | 'F' | 'g' | 'G' | 'r' | 'R' | 'w' | 'W' | 'h' | 'H' | 'l' | 'L' | 't'
                     | 'T' | 'z' | 'Z' | 'y' | 'Y' | 'j' | 'J' | 'u' | 'U' | '<' | '>' | ',' | '.'
-                    | ';' | '\'',
+                    | ';' | '\'' | ':' | '"',
                 ) => self.handle_effect_key(code),
                 KeyCode::Up | KeyCode::Down | KeyCode::Left | KeyCode::Right => {
                     self.handle_playback_key(code);
@@ -1240,6 +1243,16 @@ impl App {
                     c.camera_pan_x = (c.camera_pan_x + 0.05).min(2.0);
                 });
             }
+            KeyCode::Char(':') => {
+                self.toggle_config(|c| {
+                    c.camera_pan_y = (c.camera_pan_y - 0.05).max(-2.0);
+                });
+            }
+            KeyCode::Char('"') => {
+                self.toggle_config(|c| {
+                    c.camera_pan_y = (c.camera_pan_y + 0.05).min(2.0);
+                });
+            }
             _ => {}
         }
     }
@@ -1336,7 +1349,7 @@ impl App {
             let (canvas_width, canvas_height) = if config.fullscreen {
                 (new_size.0, new_size.1)
             } else {
-                let sidebar_width = 20u16;
+                let sidebar_width = 24u16;
                 let spectrum_height = if config.show_spectrum { 3u16 } else { 0u16 };
                 (
                     new_size.0.saturating_sub(sidebar_width),
@@ -1533,14 +1546,57 @@ impl App {
     /// Load a visual source (image or video) and update sidebar name.
     fn load_visual(&mut self, path: &Path, media_type: MediaType) {
         match media_type {
-            MediaType::Image => match af_source::image::ImageSource::new(path) {
-                Ok(mut source) => {
-                    self.current_frame = af_core::traits::Source::next_frame(&mut source);
-                    self.frame_rx = None;
-                    log::info!("Image chargée: {}", path.display());
+            MediaType::Image => {
+                let is_gif = path
+                    .extension()
+                    .and_then(|e| e.to_str())
+                    .is_some_and(|e| e.eq_ignore_ascii_case("gif"));
+                if is_gif {
+                    match af_source::image::GifSource::try_new(path) {
+                        Ok(Some(gif)) => {
+                            log::info!(
+                                "GIF animé chargé ({} frames): {}",
+                                gif.frame_count(),
+                                path.display()
+                            );
+                            let (frame_tx, frame_rx) = flume::bounded(3);
+                            std::thread::spawn(move || {
+                                let mut source = gif;
+                                loop {
+                                    if let Some(frame) =
+                                        af_core::traits::Source::next_frame(&mut source)
+                                        && frame_tx.send(frame).is_err()
+                                    {
+                                        break;
+                                    }
+                                    std::thread::sleep(std::time::Duration::from_millis(1));
+                                }
+                            });
+                            self.frame_rx = Some(frame_rx);
+                            self.current_frame = None;
+                        }
+                        Ok(None) => match af_source::image::ImageSource::new(path) {
+                            Ok(mut source) => {
+                                self.current_frame =
+                                    af_core::traits::Source::next_frame(&mut source);
+                                self.frame_rx = None;
+                                log::info!("Image chargée: {}", path.display());
+                            }
+                            Err(e) => log::error!("Erreur chargement image: {e}"),
+                        },
+                        Err(e) => log::error!("Erreur décodage GIF: {e}"),
+                    }
+                } else {
+                    match af_source::image::ImageSource::new(path) {
+                        Ok(mut source) => {
+                            self.current_frame = af_core::traits::Source::next_frame(&mut source);
+                            self.frame_rx = None;
+                            log::info!("Image chargée: {}", path.display());
+                        }
+                        Err(e) => log::error!("Erreur chargement image: {e}"),
+                    }
                 }
-                Err(e) => log::error!("Erreur chargement image: {e}"),
-            },
+            }
             MediaType::Video => self.start_video(path),
             MediaType::Audio => {} // unreachable in this context
         }

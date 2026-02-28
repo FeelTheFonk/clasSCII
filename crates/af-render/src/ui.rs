@@ -20,7 +20,7 @@ pub struct CreationOverlayData<'a> {
     /// Selected effect index.
     pub selected_effect: usize,
     /// Effect names and current values.
-    pub effects: Vec<(&'a str, f32, f32)>, // (name, value, max)
+    pub effects: [(&'a str, f32, f32); 10], // (name, value, max)
 }
 use crate::widgets::AudioPanelState;
 
@@ -379,7 +379,7 @@ fn draw_sidebar(
         ),
         kv_line("[,/.]", "Rot", &fmt!("{:.2}", config.camera_rotation)),
         kv_line("[;/']", "PanX", &fmt!("{:.2}", config.camera_pan_x)),
-        kv_line("", "PanY", &fmt!("{:.2}", config.camera_pan_y)),
+        kv_line("[:/ \"]", "PanY", &fmt!("{:.2}", config.camera_pan_y)),
         // ─── Audio ──────────────
         Line::from(Span::styled(
             "─── Audio ──────────",
@@ -509,16 +509,17 @@ fn draw_help_overlay(frame: &mut Frame, area: Rect) {
         Line::from(" j/J      Strobe dcy ±"),
         Line::from(" u/U      Wave speed ±"),
         Line::from(Span::styled(
+            " Color FX best in ASCII/Quadrant",
+            Style::default().fg(Color::DarkGray),
+        )),
+        Line::from(Span::styled(
             " ── Camera ──────",
             Style::default().fg(Color::Yellow),
         )),
         Line::from(" </>      Zoom ±"),
         Line::from(" ,/.      Rotation ±"),
         Line::from(" ;/'      Pan X ±"),
-        Line::from(Span::styled(
-            " Color FX best in ASCII/Quadrant",
-            Style::default().fg(Color::DarkGray),
-        )),
+        Line::from(" :/\"      Pan Y ±"),
         Line::from(Span::styled(
             " ── Audio ───────",
             Style::default().fg(Color::Yellow),

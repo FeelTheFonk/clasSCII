@@ -1,6 +1,7 @@
-/// Placeholder for image source. Phase 2.
+/// Image and animated GIF sources.
 use std::path::Path;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use af_core::frame::FrameBuffer;
 use af_core::traits::Source;
@@ -73,4 +74,102 @@ pub fn load_image(path: &str) -> Result<FrameBuffer> {
         height: h,
         is_camera_baked: false,
     })
+}
+
+/// Source de GIF animé. Pré-décode toutes les frames et les boucle avec timing natif.
+///
+/// # Example
+/// ```no_run
+/// use af_source::image::GifSource;
+/// use std::path::Path;
+/// if let Some(source) = GifSource::try_new(Path::new("anim.gif")).unwrap() {
+///     assert!(source.frame_count() > 1);
+/// }
+/// ```
+pub struct GifSource {
+    frames: Vec<Arc<FrameBuffer>>,
+    delays: Vec<Duration>,
+    current: usize,
+    last_advance: Instant,
+}
+
+impl GifSource {
+    /// Décode un GIF animé depuis le disque.
+    /// Retourne `Ok(None)` si le GIF n'a qu'une seule frame (utiliser `ImageSource`).
+    ///
+    /// # Errors
+    /// Retourne une erreur si le fichier ne peut être ouvert ou décodé.
+    #[allow(clippy::cast_possible_truncation)]
+    pub fn try_new(path: &Path) -> Result<Option<Self>> {
+        use image::AnimationDecoder;
+        use image::codecs::gif::GifDecoder;
+        use std::fs::File;
+        use std::io::BufReader;
+
+        let file =
+            File::open(path).with_context(|| format!("Impossible d'ouvrir {}", path.display()))?;
+        let decoder = GifDecoder::new(BufReader::new(file))
+            .with_context(|| format!("GIF invalide: {}", path.display()))?;
+        let raw_frames = decoder
+            .into_frames()
+            .collect_frames()
+            .with_context(|| format!("Erreur décodage frames GIF: {}", path.display()))?;
+
+        if raw_frames.len() <= 1 {
+            return Ok(None);
+        }
+
+        let mut frames = Vec::with_capacity(raw_frames.len());
+        let mut delays = Vec::with_capacity(raw_frames.len());
+
+        for raw in &raw_frames {
+            let (numer, denom) = raw.delay().numer_denom_ms();
+            let ms = if denom == 0 { 100 } else { numer / denom };
+            let delay = Duration::from_millis(u64::from(ms.max(10)));
+
+            let buf = raw.buffer();
+            let (w, h) = (buf.width(), buf.height());
+            frames.push(Arc::new(FrameBuffer {
+                data: buf.as_raw().clone(),
+                width: w,
+                height: h,
+                is_camera_baked: false,
+            }));
+            delays.push(delay);
+        }
+
+        Ok(Some(Self {
+            frames,
+            delays,
+            current: 0,
+            last_advance: Instant::now(),
+        }))
+    }
+
+    /// Nombre total de frames dans le GIF.
+    #[must_use]
+    pub fn frame_count(&self) -> usize {
+        self.frames.len()
+    }
+}
+
+impl Source for GifSource {
+    fn next_frame(&mut self) -> Option<Arc<FrameBuffer>> {
+        if self.frames.is_empty() {
+            return None;
+        }
+        if self.last_advance.elapsed() >= self.delays[self.current] {
+            self.current = (self.current + 1) % self.frames.len();
+            self.last_advance = Instant::now();
+        }
+        Some(Arc::clone(&self.frames[self.current]))
+    }
+
+    fn native_size(&self) -> (u32, u32) {
+        self.frames.first().map_or((0, 0), |f| (f.width, f.height))
+    }
+
+    fn is_live(&self) -> bool {
+        true
+    }
 }
