@@ -206,13 +206,13 @@ impl CreationEngine {
             }
             CreationPreset::Percussive => {
                 // Beat-locked: heavy strobe, chromatic, wave on hits
-                config.beat_flash_intensity = (onset_envelope * 1.8 * mi).clamp(0.0, 2.0);
+                config.beat_flash_intensity = (onset_envelope * 0.8 * mi).clamp(0.0, 2.0);
                 config.chromatic_offset = (audio.bass * 3.0 * mi).clamp(0.0, 5.0);
                 config.wave_amplitude = (onset_envelope * 0.5 * mi).clamp(0.0, 1.0);
                 config.fade_decay = (audio.rms * 0.4 * mi).clamp(0.0, 1.0);
                 config.glow_intensity = (audio.mid * 0.5 * mi).clamp(0.0, 2.0);
                 config.color_pulse_speed = 0.0;
-                config.zalgo_intensity = (onset_envelope * 2.5 * mi).clamp(0.0, 5.0);
+                config.zalgo_intensity = (onset_envelope * 1.2 * mi).clamp(0.0, 5.0);
             }
             CreationPreset::Psychedelic => {
                 // Everything cranked — fast color rotation, heavy visual artifacts

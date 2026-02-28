@@ -361,6 +361,9 @@ fn draw_sidebar(
         kv_line("[h/H]", "Pulse", &fmt!("{:.1}", config.color_pulse_speed)),
         kv_line("[l/L]", "Scan", &scan_str),
         kv_line("[z/Z]", "Zalgo", &fmt!("{:.1}", config.zalgo_intensity)),
+        kv_line("[y/Y]", "TStab", &fmt!("{:.1}", config.temporal_stability)),
+        kv_line("[j/J]", "SDcy", &fmt!("{:.2}", config.strobe_decay)),
+        kv_line("[u/U]", "WSpd", &fmt!("{:.1}", config.wave_speed)),
         // ─── Audio ──────────────
         Line::from(Span::styled(
             "─── Audio ──────────",
@@ -479,6 +482,9 @@ fn draw_help_overlay(frame: &mut Frame, area: Rect) {
         Line::from(" h/H      Color pulse ±"),
         Line::from(" l/L      Scan lines"),
         Line::from(" z/Z      Zalgo ±"),
+        Line::from(" y/Y      Stability ±"),
+        Line::from(" j/J      Strobe dcy ±"),
+        Line::from(" u/U      Wave speed ±"),
         Line::from(Span::styled(
             " Color FX best in ASCII/Quadrant",
             Style::default().fg(Color::DarkGray),

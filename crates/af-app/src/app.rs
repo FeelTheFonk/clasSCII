@@ -583,7 +583,7 @@ impl App {
                 ) => self.handle_render_key(code),
                 KeyCode::Char(
                     'f' | 'F' | 'g' | 'G' | 'r' | 'R' | 'w' | 'W' | 'h' | 'H' | 'l' | 'L' | 't'
-                    | 'T' | 'z' | 'Z',
+                    | 'T' | 'z' | 'Z' | 'y' | 'Y' | 'j' | 'J' | 'u' | 'U',
                 ) => self.handle_effect_key(code),
                 KeyCode::Up | KeyCode::Down | KeyCode::Left | KeyCode::Right => {
                     self.handle_playback_key(code);
@@ -1134,6 +1134,32 @@ impl App {
                 self.toggle_config(|c| {
                     c.zalgo_intensity = (c.zalgo_intensity + 0.5).min(5.0);
                 });
+            }
+            KeyCode::Char('y') => {
+                self.toggle_config(|c| {
+                    c.temporal_stability = (c.temporal_stability - 0.1).max(0.0);
+                });
+            }
+            KeyCode::Char('Y') => {
+                self.toggle_config(|c| {
+                    c.temporal_stability = (c.temporal_stability + 0.1).min(1.0);
+                });
+            }
+            KeyCode::Char('j') => {
+                self.toggle_config(|c| {
+                    c.strobe_decay = (c.strobe_decay - 0.05).max(0.5);
+                });
+            }
+            KeyCode::Char('J') => {
+                self.toggle_config(|c| {
+                    c.strobe_decay = (c.strobe_decay + 0.05).min(0.99);
+                });
+            }
+            KeyCode::Char('u') => {
+                self.toggle_config(|c| c.wave_speed = (c.wave_speed - 0.5).max(0.0));
+            }
+            KeyCode::Char('U') => {
+                self.toggle_config(|c| c.wave_speed = (c.wave_speed + 0.5).min(10.0));
             }
             _ => {}
         }

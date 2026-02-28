@@ -219,7 +219,7 @@ pub fn run_batch_export(
             if current_features.onset && current_features.beat_intensity > 0.85 {
                 source.next_media();
 
-                if fastrand::f64() < 0.25 {
+                if fastrand::f64() < 0.08 {
                     let modes = [
                         af_core::config::RenderMode::Ascii,
                         af_core::config::RenderMode::HalfBlock,
@@ -235,12 +235,12 @@ pub fn run_batch_export(
                     macro_mode_override = Some(modes[(current_mode_idx + 1) % modes.len()].clone());
                 }
 
-                if fastrand::f64() < 0.2 {
+                if fastrand::f64() < 0.06 {
                     let current = macro_invert_override.unwrap_or(frame_config.invert);
                     macro_invert_override = Some(!current);
                 }
 
-                if fastrand::f64() < 0.33 {
+                if fastrand::f64() < 0.12 {
                     let current_idx = macro_charset_override
                         .as_ref()
                         .map_or(frame_config.charset_index, |(i, _)| *i);

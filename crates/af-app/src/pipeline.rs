@@ -66,6 +66,7 @@ pub fn start_audio(
 ///
 /// # Errors
 /// Returns an error if source initialization fails.
+#[allow(clippy::needless_pass_by_value)] // Arc consumed by spawn_video_thread under #[cfg(feature = "video")]
 pub fn start_source(cli: &Cli, clock: Option<Arc<MediaClock>>) -> anyhow::Result<SourceResult> {
     let _ = &clock; // Utilisé uniquement avec feature="video"
     if let Some(ref path) = cli.image {
