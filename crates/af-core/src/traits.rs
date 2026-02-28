@@ -5,7 +5,7 @@ use crate::frame::{AsciiGrid, AudioFeatures, FrameBuffer};
 
 /// Fournit des frames visuelles au pipeline.
 ///
-/// Implémenté par : `ImageSource`, `VideoSource`, `WebcamSource`, `ProceduralSource`.
+/// Implémenté par : `ImageSource`, `VideoSource`, `ProceduralSource`.
 ///
 /// # Example
 /// ```
@@ -30,7 +30,7 @@ pub trait Source: Send + 'static {
     /// Dimensions natives de la source (avant resize).
     fn native_size(&self) -> (u32, u32);
 
-    /// Indique si la source est infinie (webcam, procédural) ou finie (fichier).
+    /// Indique si la source est infinie (procédural) ou finie (fichier).
     fn is_live(&self) -> bool;
 
     /// Déplace la tête de lecture à un timestamp spécifique (en secondes).

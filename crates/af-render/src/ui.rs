@@ -70,6 +70,19 @@ pub fn draw(
 ) {
     let area = frame.area();
 
+    // Minimum terminal size guard
+    if area.width < 80 || area.height < 20 {
+        let msg = format!(
+            "Terminal too small ({}x{}, need 80x20)",
+            area.width, area.height
+        );
+        let p = Paragraph::new(msg)
+            .alignment(ratatui::layout::Alignment::Center)
+            .style(Style::default().fg(Color::Red));
+        frame.render_widget(p, area);
+        return;
+    }
+
     // Si le mode plein écran exclusif est activé, ne rendre que le canevas ASCII
     if config.fullscreen {
         canvas::render_grid(frame.buffer_mut(), area, grid, config.zalgo_intensity);
@@ -253,9 +266,6 @@ fn draw_sidebar(
     ];
     let charset_name = charset_names.get(config.charset_index).unwrap_or(&"Custom");
 
-    let fps_str = format!("{:.0} FPS", fps_counter.fps());
-    let ft_str = format!("{:.1}ms", fps_counter.frame_time_ms);
-
     // Onset indicator
     let onset_str = if audio.is_some_and(|a| a.onset) {
         "● BEAT"
@@ -263,90 +273,108 @@ fn draw_sidebar(
         "○"
     };
 
-    // Typographic  closure
-    let kv = |k: &str, lbl: &str, val: String| -> Line {
+    // Reusable formatting buffer — single allocation reused for all numeric values
+    let mut buf = String::with_capacity(16);
+
+    // Key-value line builder: labels via static &str (zero-alloc), values via shared buf
+    let label = Color::Gray;
+    let val_c = Color::White;
+    let section = Color::Yellow;
+    let kv_line = |k: &str, lbl: &str, val: &str| -> Line {
         Line::from(vec![
-            Span::styled(format!(" {k:<5} "), Style::default().fg(Color::DarkGray)),
-            Span::styled(format!("{lbl:<5}: "), Style::default().fg(Color::DarkGray)),
-            Span::styled(val, Style::default().fg(Color::White)),
+            Span::styled(format!(" {k:<5} "), Style::default().fg(label)),
+            Span::styled(format!("{lbl:<5}: "), Style::default().fg(label)),
+            Span::styled(val.to_owned(), Style::default().fg(val_c)),
         ])
+    };
+
+    // Pre-format all numeric values into owned strings via buf (reuse capacity)
+    macro_rules! fmt {
+        ($fmt:literal, $val:expr) => {{
+            use std::fmt::Write;
+            buf.clear();
+            write!(buf, $fmt, $val).ok();
+            buf.clone()
+        }};
+    }
+
+    let dither_str = match config.dither_mode {
+        af_core::config::DitherMode::Bayer8x8 => "Bayer8",
+        af_core::config::DitherMode::BlueNoise16 => "BNoise",
+        af_core::config::DitherMode::None => "OFF",
+    };
+    let scan_str = if config.scanline_gap == 0 {
+        "OFF".to_owned()
+    } else {
+        fmt!("{}", config.scanline_gap)
     };
 
     let mut lines = vec![
         Line::from(Span::styled(state_str, Style::default().fg(Color::Green))),
         Line::from(""),
+        // ─── Render ─────────────
         Line::from(Span::styled(
-            "─ Render ──",
-            Style::default().fg(Color::Yellow),
+            "─── Render ─────────",
+            Style::default().fg(section),
         )),
-        kv("[Tab]", "Mode", mode_str.to_string()),
-        kv("[p/P]", "Prst", preset_name.unwrap_or("Custom").to_string()),
-        kv("[1-0]", "Char", charset_name.to_string()),
-        kv("[d/D]", "Dens", format!("{:.2}", config.density_scale)),
-        kv(
+        kv_line("[Tab]", "Mode", mode_str),
+        kv_line("[p/P]", "Prst", preset_name.unwrap_or("Custom")),
+        kv_line("[1-0]", "Char", charset_name),
+        kv_line("[d/D]", "Dens", &fmt!("{:.2}", config.density_scale)),
+        kv_line(
             "[c]",
             "Colr",
-            (if config.color_enabled { "ON" } else { "OFF" }).to_string(),
+            if config.color_enabled { "ON" } else { "OFF" },
         ),
-        kv("[m]", "CMod", color_mode_str.to_string()),
-        kv(
-            "[i]",
-            "Inv",
-            (if config.invert { "ON" } else { "OFF" }).to_string(),
-        ),
-        kv("[/]", "Cont", format!("{:.1}", config.contrast)),
-        kv("{ }", "Brgt", format!("{:.2}", config.brightness)),
-        kv("-/+", "Sat", format!("{:.1}", config.saturation)),
-        kv("[e]", "Edge", format!("{:.1}", config.edge_threshold)),
-        kv("[E]", "EMix", format!("{:.2}", config.edge_mix)),
-        kv(
+        kv_line("[m]", "CMod", color_mode_str),
+        kv_line("[i]", "Inv", if config.invert { "ON" } else { "OFF" }),
+        kv_line("[/]", "Cont", &fmt!("{:.1}", config.contrast)),
+        kv_line("{ }", "Brgt", &fmt!("{:.2}", config.brightness)),
+        kv_line("-/+", "Sat", &fmt!("{:.1}", config.saturation)),
+        kv_line("[e]", "Edge", &fmt!("{:.1}", config.edge_threshold)),
+        kv_line("[E]", "EMix", &fmt!("{:.2}", config.edge_mix)),
+        kv_line(
             "[s]",
             "Shap",
-            (if config.shape_matching { "ON" } else { "OFF" }).to_string(),
+            if config.shape_matching { "ON" } else { "OFF" },
         ),
-        kv("[a]", "Aspc", format!("{:.1}", config.aspect_ratio)),
-        kv("[b]", "BG", bg_str.to_string()),
-        kv(
-            "[n]",
-            "Dthr",
-            match config.dither_mode {
-                af_core::config::DitherMode::Bayer8x8 => "Bayer8",
-                af_core::config::DitherMode::BlueNoise16 => "BNoise",
-                af_core::config::DitherMode::None => "OFF",
-            }
-            .to_string(),
-        ),
-        kv("[f/F]", "Fade", format!("{:.1}", config.fade_decay)),
-        kv("[g/G]", "Glow", format!("{:.1}", config.glow_intensity)),
-        kv(
+        kv_line("[a]", "Aspc", &fmt!("{:.1}", config.aspect_ratio)),
+        kv_line("[b]", "BG", bg_str),
+        kv_line("[n]", "Dthr", dither_str),
+        // ─── Effects ────────────
+        Line::from(Span::styled(
+            "─── Effects ────────",
+            Style::default().fg(section),
+        )),
+        kv_line("[f/F]", "Fade", &fmt!("{:.1}", config.fade_decay)),
+        kv_line("[g/G]", "Glow", &fmt!("{:.1}", config.glow_intensity)),
+        kv_line(
             "[t/T]",
             "Strob",
-            format!("{:.1}", config.beat_flash_intensity),
+            &fmt!("{:.1}", config.beat_flash_intensity),
         ),
-        kv("[r/R]", "Chrom", format!("{:.1}", config.chromatic_offset)),
-        kv("[w/W]", "Wave", format!("{:.2}", config.wave_amplitude)),
-        kv("[h/H]", "Pulse", format!("{:.1}", config.color_pulse_speed)),
-        kv(
-            "[l/L]",
-            "Scan",
-            if config.scanline_gap == 0 {
-                "OFF".to_string()
-            } else {
-                format!("{}", config.scanline_gap)
-            },
-        ),
-        Line::from(""),
+        kv_line("[r/R]", "Chrom", &fmt!("{:.1}", config.chromatic_offset)),
+        kv_line("[w/W]", "Wave", &fmt!("{:.2}", config.wave_amplitude)),
+        kv_line("[h/H]", "Pulse", &fmt!("{:.1}", config.color_pulse_speed)),
+        kv_line("[l/L]", "Scan", &scan_str),
+        // ─── Audio ──────────────
         Line::from(Span::styled(
-            "─ Audio ───",
-            Style::default().fg(Color::Yellow),
+            "─── Audio ──────────",
+            Style::default().fg(section),
         )),
-        kv("↑/↓", "Sens", format!("{:.1}", config.audio_sensitivity)),
-        kv("", "Smth", format!("{:.2}", config.audio_smoothing)),
+        kv_line("↑/↓", "Sens", &fmt!("{:.1}", config.audio_sensitivity)),
+        kv_line("", "Smth", &fmt!("{:.2}", config.audio_smoothing)),
     ];
 
     if let Some(features) = audio {
-        lines.push(Line::from(format!(" RMS: {:.2}", features.rms)));
-        lines.push(Line::from(format!(" BPM: {:.0}", features.bpm)));
+        lines.push(Line::from(Span::styled(
+            fmt!(" RMS: {:.2}", features.rms),
+            Style::default().fg(Color::White),
+        )));
+        lines.push(Line::from(Span::styled(
+            fmt!(" BPM: {:.0}", features.bpm),
+            Style::default().fg(Color::White),
+        )));
         lines.push(Line::from(Span::styled(
             format!(" {onset_str}"),
             Style::default().fg(if features.onset {
@@ -357,30 +385,30 @@ fn draw_sidebar(
         )));
     }
 
-    lines.push(Line::from(""));
+    // ─── Info ───────────────
     lines.push(Line::from(Span::styled(
-        "─ Info ────",
-        Style::default().fg(Color::Yellow),
+        "─── Info ───────────",
+        Style::default().fg(section),
     )));
-    lines.push(Line::from(format!(" {fps_str}")));
-    lines.push(Line::from(format!(" {ft_str}")));
-    // Fichiers chargés
+    lines.push(Line::from(fmt!(" {:.0} FPS", fps_counter.fps())));
+    lines.push(Line::from(fmt!(" {:.1}ms", fps_counter.frame_time_ms)));
+
     let truncate = |name: &str, max: usize| -> String {
         if name.len() > max {
             format!("..{}", &name[name.len().saturating_sub(max - 2)..])
         } else {
-            name.to_string()
+            name.to_owned()
         }
     };
     if let Some(name) = loaded_visual {
         lines.push(Line::from(vec![
-            Span::styled(" V ", Style::default().fg(Color::DarkGray)),
+            Span::styled(" V ", Style::default().fg(label)),
             Span::styled(truncate(name, 18), Style::default().fg(Color::Cyan)),
         ]));
     }
     if let Some(name) = loaded_audio {
         lines.push(Line::from(vec![
-            Span::styled(" A ", Style::default().fg(Color::DarkGray)),
+            Span::styled(" A ", Style::default().fg(label)),
             Span::styled(truncate(name, 18), Style::default().fg(Color::Magenta)),
         ]));
     }
@@ -388,7 +416,7 @@ fn draw_sidebar(
     lines.push(Line::from(""));
     lines.push(Line::from(Span::styled(
         " o/O=open C=char A=mix",
-        Style::default().fg(Color::DarkGray),
+        Style::default().fg(label),
     )));
 
     let sidebar =
@@ -405,40 +433,60 @@ fn draw_help_overlay(frame: &mut Frame, area: Rect) {
             Style::default().fg(Color::Yellow),
         )),
         Line::from(""),
+        Line::from(Span::styled(
+            " ── Navigation ──",
+            Style::default().fg(Color::Yellow),
+        )),
         Line::from(" q/Esc    Quit"),
         Line::from(" Space    Play/Pause"),
+        Line::from(" ?        Toggle help"),
+        Line::from(Span::styled(
+            " ── Render ──────",
+            Style::default().fg(Color::Yellow),
+        )),
         Line::from(" Tab      Cycle mode"),
         Line::from(" 1-0      Select charset"),
         Line::from(" d/D      Density ±"),
-        Line::from(" i        Toggle invert"),
         Line::from(" c        Toggle color"),
-        Line::from(" m        Cycle color mode"),
-        Line::from(" b        Cycle BG style"),
+        Line::from(" m        Color mode"),
+        Line::from(" i        Invert"),
         Line::from(" [ ]      Contrast ±"),
         Line::from(" { }      Brightness ±"),
         Line::from(" -/+      Saturation ±"),
-        Line::from(" f/F      Fade decay ±"),
-        Line::from(" g/G      Glow intens ±"),
-        Line::from(" t/T      Strobe intens ±"),
+        Line::from(" e/E      Edge toggl/mix"),
+        Line::from(" s        Shapes"),
+        Line::from(" a        Aspect ratio"),
+        Line::from(" b        BG style"),
+        Line::from(" n        Dither mode"),
+        Line::from(Span::styled(
+            " ── Effects ─────",
+            Style::default().fg(Color::Yellow),
+        )),
+        Line::from(" f/F      Fade ±"),
+        Line::from(" g/G      Glow ±"),
+        Line::from(" t/T      Strobe ±"),
         Line::from(" r/R      Chromatic ±"),
-        Line::from(" w/W      Wave amplit ±"),
+        Line::from(" w/W      Wave ±"),
         Line::from(" h/H      Color pulse ±"),
         Line::from(" l/L      Scan lines"),
-        Line::from(" a        Cycle aspect"),
-        Line::from(" e/E      Edge toggl/mix"),
-        Line::from(" s        Toggle shapes"),
-        Line::from(" ↑/↓      Audio sensitivity"),
+        Line::from(Span::styled(
+            " ── Audio ───────",
+            Style::default().fg(Color::Yellow),
+        )),
+        Line::from(" ↑/↓      Sensitivity ±"),
         Line::from(" ←/→      Seek ±5s"),
-        Line::from(" v        Toggle spectrum"),
-        Line::from(" p/P      Cycle preset"),
+        Line::from(" v        Spectrum"),
+        Line::from(" p/P      Preset cycle"),
+        Line::from(Span::styled(
+            " ── Overlays ────",
+            Style::default().fg(Color::Yellow),
+        )),
         Line::from(" o        Open visual"),
         Line::from(" O        Open audio"),
-        Line::from(" C        Edit charset"),
+        Line::from(" C        Charset editor"),
         Line::from(" A        Audio mixer"),
         Line::from(" K        Creation mode"),
-        Line::from(" n        Cycle dither mode"),
-        Line::from(" x        Toggle fullscreen"),
-        Line::from(" ?        Toggle help"),
+        Line::from(" x        Fullscreen"),
         Line::from(""),
         Line::from(Span::styled(
             " Press ? or Esc to close ",
@@ -446,7 +494,7 @@ fn draw_help_overlay(frame: &mut Frame, area: Rect) {
         )),
     ];
 
-    let help_width = 38u16;
+    let help_width = 42u16;
     let help_height = help_text.len() as u16 + 2;
     let x = area.x + area.width.saturating_sub(help_width) / 2;
     let y = area.y + area.height.saturating_sub(help_height) / 2;
@@ -743,19 +791,22 @@ fn draw_creation_overlay(
         let selected = i == creation.selected_effect;
         let prefix = if selected { " \u{25b8} " } else { "   " };
         let bar_len = if *max > 0.0 {
-            (value / max * 7.0) as usize
+            (value / max * 10.0).min(10.0) as usize
         } else {
             0
         };
         let bar: String =
-            "\u{2588}".repeat(bar_len) + &"\u{2591}".repeat(7_usize.saturating_sub(bar_len));
+            "\u{2588}".repeat(bar_len) + &"\u{2591}".repeat(10_usize.saturating_sub(bar_len));
         let name_color = if selected { Color::White } else { Color::Gray };
 
         lines.push(Line::from(vec![
             Span::styled(prefix, Style::default().fg(Color::Cyan)),
             Span::styled(format!("{name:<12}"), Style::default().fg(name_color)),
             Span::styled(bar, Style::default().fg(Color::Green)),
-            Span::styled(format!("  [{value:.1}]"), Style::default().fg(Color::White)),
+            Span::styled(
+                format!(" {value:.1}/{max:.1}"),
+                Style::default().fg(Color::White),
+            ),
         ]));
     }
 

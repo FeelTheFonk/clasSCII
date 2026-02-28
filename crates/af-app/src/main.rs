@@ -73,7 +73,7 @@ fn main() -> Result<()> {
     let media_clock = Arc::new(MediaClock::new(0));
     let (audio_output, audio_cmd_tx) = init_audio(&cli, &config, &media_clock);
 
-    // 7. Démarrer le source thread (si vidéo/webcam/procédural)
+    // 7. Démarrer le source thread (si vidéo/procédural)
     let has_audio = audio_output.is_some();
     let video_clock = if has_audio {
         Some(Arc::clone(&media_clock))

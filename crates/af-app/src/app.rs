@@ -141,6 +141,8 @@ pub struct App {
     pub mapping_smooth_state: Vec<f32>,
     /// Creation mode engine for automated audio-reactive effects.
     pub creation_engine: CreationEngine,
+    /// Scratch RenderConfig reused each frame (avoids per-frame Vec/String alloc).
+    pub render_config_scratch: RenderConfig,
 }
 
 impl App {
@@ -212,6 +214,7 @@ impl App {
             color_pulse_phase: 0.0,
             mapping_smooth_state: Vec::new(),
             creation_engine: CreationEngine::default(),
+            render_config_scratch: RenderConfig::default(),
         })
     }
 
@@ -281,8 +284,9 @@ impl App {
 
             // === Appliquer audio mappings à la config ===
             let config = self.config.load();
-            // R1: acceptable — ~200B/frame allocation for mutable audio mapping overlay
-            let mut render_config = (**config).clone();
+            // R1: reuse scratch RenderConfig (clone_from preserves Vec/String capacity)
+            let mut render_config = std::mem::take(&mut self.render_config_scratch);
+            render_config.clone_from(&config);
             if let Some(ref features) = audio_features {
                 pipeline::apply_audio_mappings(
                     &mut render_config,
@@ -470,6 +474,9 @@ impl App {
                 );
             })?;
             self.sidebar_dirty = false;
+
+            // Restore scratch (preserves internal Vec/String allocations for next frame)
+            self.render_config_scratch = render_config;
         }
 
         Ok(())

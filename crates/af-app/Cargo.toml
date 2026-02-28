@@ -34,9 +34,8 @@ fastrand = "2"
 [features]
 default = ["image-source"]
 image-source = ["af-source/image-source"]
-full = ["video", "webcam", "procedural"]
+full = ["video", "procedural"]
 video = ["af-source/video"]
-webcam = ["af-source/webcam"]
 procedural = ["af-source/procedural"]
 
 [build-dependencies]

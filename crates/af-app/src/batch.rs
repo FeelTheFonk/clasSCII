@@ -7,7 +7,7 @@ use af_ascii::compositor::Compositor;
 use af_audio::batch_analyzer::BatchAnalyzer;
 use af_core::config::RenderConfig;
 #[cfg(feature = "video")]
-use af_core::frame::{AsciiGrid, FrameBuffer};
+use af_core::frame::{AsciiCell, AsciiGrid, FrameBuffer};
 #[cfg(feature = "video")]
 use af_core::traits::Source;
 #[cfg(feature = "video")]
@@ -79,12 +79,10 @@ pub fn run_batch_export(
                 let secs = SystemTime::now()
                     .duration_since(SystemTime::UNIX_EPOCH)
                     .map_or(0, |d| d.as_secs());
-                // UTC timestamp YYYYMMDD_HHMMSS (sufficient for unique naming)
                 let s = secs % 60;
                 let m = (secs / 60) % 60;
                 let h = (secs / 3600) % 24;
                 let days = secs / 86400;
-                // Approximate date from epoch days (sufficient precision for filenames)
                 let mut y = 1970u64;
                 let mut remaining = days;
                 loop {
@@ -140,7 +138,7 @@ pub fn run_batch_export(
         let mut analyzer = BatchAnalyzer::new(target_fps, 44100, 2048);
         let timeline = analyzer.analyze_file(audio_path)?;
 
-        let mapper = AutoGenerativeMapper::new(config, timeline);
+        let mut mapper = AutoGenerativeMapper::new(config, timeline);
 
         // === Étape 2 : Initialisation de la source dossier ===
         log::info!(
@@ -169,8 +167,9 @@ pub fn run_batch_export(
         let temp_video = final_output.with_extension("temp.mp4");
         let mut muxer = Mp4Muxer::new(&temp_video, raster_w, raster_h, target_fps)?;
 
-        let initial_config = mapper.config_at(0.0);
-        let mut compositor = Compositor::new(&initial_config.charset);
+        let mut frame_config = RenderConfig::default();
+        mapper.apply_at(0.0, 0.0, &mut frame_config);
+        let mut compositor = Compositor::new(&frame_config.charset);
         let mut raster_fb = FrameBuffer::new(raster_w, raster_h);
 
         let total_frames = mapper.get_timeline().total_frames();
@@ -178,6 +177,29 @@ pub fn run_batch_export(
 
         let mut resizer = af_source::resize::Resizer::new();
         let mut resized_source = FrameBuffer::new(target_w, target_h);
+
+        // === Pre-allocated effect buffers (R1 compliance) ===
+        let mut prev_grid = AsciiGrid::new(grid_w, grid_h);
+        let mut glow_brightness_buf: Vec<u8> =
+            Vec::with_capacity(usize::from(grid_w) * usize::from(grid_h));
+        let mut effect_fg_buf: Vec<(u8, u8, u8)> = Vec::new();
+        let mut effect_row_buf: Vec<AsciiCell> = Vec::new();
+        let mut onset_envelope: f32 = 0.0;
+        let mut color_pulse_phase: f32 = 0.0;
+
+        // === Pre-allocated charset pool (avoid per-beat .to_string()) ===
+        let charset_pool: [&str; 10] = [
+            af_core::charset::CHARSET_FULL,
+            af_core::charset::CHARSET_DENSE,
+            af_core::charset::CHARSET_SHORT_1,
+            af_core::charset::CHARSET_BLOCKS,
+            af_core::charset::CHARSET_MINIMAL,
+            af_core::charset::CHARSET_GLITCH_1,
+            af_core::charset::CHARSET_GLITCH_2,
+            af_core::charset::CHARSET_DIGITAL,
+            af_core::charset::CHARSET_EXTENDED,
+            af_core::charset::CHARSET_BINARY,
+        ];
 
         log::info!("Boucle de Rendu : {total_frames} frames à {target_fps}fps");
 
@@ -188,15 +210,14 @@ pub fn run_batch_export(
         for frame_idx in 0..total_frames {
             let timestamp_secs = frame_idx as f64 * frame_duration;
             let current_features = mapper.get_timeline().get_at_time(timestamp_secs);
-            let mut frame_config = (*mapper.config_at(timestamp_secs)).clone();
+
+            // Apply audio mappings with curve + smoothing (zero-alloc: reuses frame_config)
+            mapper.apply_at(timestamp_secs, onset_envelope, &mut frame_config);
 
             // === True Generative Clip Sequencing ===
-            // Macro-variations on strong beats for experimental clip generation
             if current_features.onset && current_features.beat_intensity > 0.85 {
-                // 1. Change media
                 source.next_media();
 
-                // 2. Cycle Render Mode (1 chance out of 4)
                 if fastrand::f64() < 0.25 {
                     let modes = [
                         af_core::config::RenderMode::Ascii,
@@ -213,30 +234,18 @@ pub fn run_batch_export(
                     macro_mode_override = Some(modes[(current_mode_idx + 1) % modes.len()].clone());
                 }
 
-                // 3. Spontaneous Invert Flash (1 chance out of 5)
                 if fastrand::f64() < 0.2 {
                     let current = macro_invert_override.unwrap_or(frame_config.invert);
                     macro_invert_override = Some(!current);
                 }
 
-                // 4. Randomize Charset Rotations (1 chance out of 3)
                 if fastrand::f64() < 0.33 {
                     let current_idx = macro_charset_override
                         .as_ref()
                         .map_or(frame_config.charset_index, |(i, _)| *i);
                     let new_idx = (current_idx + 1) % 10;
-                    let new_charset = match new_idx {
-                        0 => af_core::charset::CHARSET_FULL.to_string(),
-                        1 => af_core::charset::CHARSET_DENSE.to_string(),
-                        2 => af_core::charset::CHARSET_SHORT_1.to_string(),
-                        3 => af_core::charset::CHARSET_BLOCKS.to_string(),
-                        4 => af_core::charset::CHARSET_MINIMAL.to_string(),
-                        5 => af_core::charset::CHARSET_GLITCH_1.to_string(),
-                        6 => af_core::charset::CHARSET_GLITCH_2.to_string(),
-                        7 => af_core::charset::CHARSET_DIGITAL.to_string(),
-                        8 => af_core::charset::CHARSET_EXTENDED.to_string(),
-                        _ => af_core::charset::CHARSET_BINARY.to_string(),
-                    };
+                    let mut new_charset = String::new();
+                    new_charset.push_str(charset_pool[new_idx]);
                     macro_charset_override = Some((new_idx, new_charset));
                 }
             }
@@ -264,20 +273,80 @@ pub fn run_batch_export(
                     &mut grid,
                 );
 
-                // --- Effect Pipeline ---
-                if frame_config.fade_decay > 0.0 {
-                    // Requires keeping a prev grid... simplified for batch offline:
-                    // To keep it 100% allocation free and simple for headless, we skip fade decay in batch
-                    // or we would need a persistent prev_grid. Let's just do beat flash.
+                // === Full effect pipeline (parity with interactive app.rs) ===
+
+                // 0. Temporal stability (anti-flicker)
+                if frame_config.temporal_stability > 0.0 {
+                    af_render::effects::apply_temporal_stability(
+                        &mut grid,
+                        &prev_grid,
+                        frame_config.temporal_stability,
+                    );
                 }
+
+                // Onset envelope tracking
+                if current_features.onset {
+                    onset_envelope = 1.0;
+                } else {
+                    onset_envelope *= frame_config.strobe_decay;
+                }
+
+                // Color pulse phase update
+                if frame_config.color_pulse_speed > 0.0 {
+                    color_pulse_phase = (color_pulse_phase
+                        + frame_config.color_pulse_speed / target_fps as f32)
+                        % 1.0;
+                }
+
+                // 1. Wave distortion
+                af_render::effects::apply_wave_distortion(
+                    &mut grid,
+                    frame_config.wave_amplitude,
+                    frame_config.wave_speed,
+                    current_features.beat_phase * std::f32::consts::TAU,
+                    &mut effect_row_buf,
+                );
+
+                // 2. Chromatic aberration
+                af_render::effects::apply_chromatic_aberration(
+                    &mut grid,
+                    frame_config.chromatic_offset,
+                    &mut effect_fg_buf,
+                );
+
+                // 3. Color pulse (hue rotation)
+                af_render::effects::apply_color_pulse(&mut grid, color_pulse_phase);
+
+                // 4. Fade trails
+                if frame_config.fade_decay > 0.0 {
+                    af_render::effects::apply_fade_trails(
+                        &mut grid,
+                        &prev_grid,
+                        frame_config.fade_decay,
+                    );
+                }
+
+                // 5. Strobe
                 af_render::effects::apply_strobe(
                     &mut grid,
-                    if current_features.onset { 1.0 } else { 0.0 },
+                    onset_envelope,
                     frame_config.beat_flash_intensity,
                 );
 
-                // Note: Glow is skipped in headless unless we rasterize the glow.
-                // The current rasterizer just paints the characters.
+                // 6. Scan lines
+                af_render::effects::apply_scan_lines(&mut grid, frame_config.scanline_gap, 0.3);
+
+                // 7. Glow
+                if frame_config.glow_intensity > 0.0 {
+                    af_render::effects::apply_glow(
+                        &mut grid,
+                        frame_config.glow_intensity,
+                        &mut glow_brightness_buf,
+                    );
+                }
+
+                // Save grid for next frame's fade/temporal effects
+                prev_grid.copy_from(&grid);
 
                 raster_fb.data.fill(0);
                 rasterizer.render(&grid, &mut raster_fb, frame_config.zalgo_intensity);

@@ -14,10 +14,6 @@ pub struct Cli {
     #[arg(long)]
     pub video: Option<PathBuf>,
 
-    /// Utiliser la webcam comme source. Requiert --features webcam.
-    #[arg(long, default_value_t = false)]
-    pub webcam: bool,
-
     /// Générateur procédural : "noise", "plasma", "particles", "starfield".
     #[arg(long)]
     pub procedural: Option<String>,
@@ -67,18 +63,17 @@ impl Cli {
     pub fn validate_source(&self) -> anyhow::Result<()> {
         let count = usize::from(self.image.is_some())
             + usize::from(self.video.is_some())
-            + usize::from(self.webcam)
             + usize::from(self.procedural.is_some())
             + usize::from(self.batch_folder.is_some());
 
         if count == 0 {
             anyhow::bail!(
-                "Aucune source visuelle spécifiée. Utilisez --image, --video, --webcam, --procedural, ou --batch-folder."
+                "Aucune source visuelle spécifiée. Utilisez --image, --video, --procedural, ou --batch-folder."
             );
         }
         if count > 1 {
             anyhow::bail!(
-                "Une seule source visuelle à la fois. Spécifiez --image, --video, --webcam, --procedural, OU --batch-folder."
+                "Une seule source visuelle à la fois. Spécifiez --image, --video, --procedural, OU --batch-folder."
             );
         }
 

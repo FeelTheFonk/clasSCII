@@ -11,7 +11,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.4.0"
+version = "0.5.0"
 edition = "2024"
 rust-version = "1.88"
 license = "MIT OR Apache-2.0"
@@ -52,7 +52,6 @@ symphonia = { version = "0.5", features = ["mp3", "flac", "ogg", "wav", "aac", "
 # Remplacé par subprocess std::process dans af-source/src/video.rs.
 # Prérequis runtime: ffmpeg + ffprobe en PATH (WinGet: winget install ffmpeg).
 # ffmpeg-the-third = "2"    # Désactivé — voir af-source/src/video.rs DEVIATION R9
-# nokhwa = "0.10"           # Activé via feature flag
 
 # === Utilitaires ===
 notify = "7"

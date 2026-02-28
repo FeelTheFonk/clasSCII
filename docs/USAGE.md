@@ -38,7 +38,6 @@ classcii --video movie.mp4
 |---------|-------------|
 | `--image <file>` | Load a static image (PNG, JPEG, BMP, GIF) |
 | `--video <file>` | Load a video file (MP4, MKV, AVI, MOV, WEBM) |
-| `--webcam` | Use the default webcam |
 | `--procedural <type>` | Use a procedural generator: `noise`, `plasma`, `particles`, `starfield` |
 | `--batch-folder <dir>` | Batch export mode: process all media in a folder |
 

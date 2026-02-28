@@ -62,7 +62,7 @@ pub fn start_audio(
 /// Start the visual source pipeline.
 ///
 /// For static images, returns the image as an Arc-wrapped frame.
-/// For dynamic sources (video/webcam), returns a receiver channel.
+/// For dynamic sources (video), returns a receiver channel.
 ///
 /// # Errors
 /// Returns an error if source initialization fails.

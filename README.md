@@ -29,7 +29,7 @@ A fourth execution mode — **Batch Export** — runs headless (no terminal) and
 | `af-audio` | Audio capture (CPAL), FFT analysis, feature extraction, and offline `BatchAnalyzer`. |
 | `af-ascii` |  Projections: Luma-to-ASCII, spatial quantization (Braille, Quadrant, Sextant U+1FB00, Octant U+1CD00), Bayer Dithering, and edge detection. |
 | `af-render` | Display backend (`ratatui`), partial redraws, and Zalgo typographical distortions. |
-| `af-source` | Input stream decoding (Image, FFmpeg, Webcam, `FolderBatchSource`). |
+| `af-source` | Input stream decoding (Image, FFmpeg, `FolderBatchSource`). |
 | `af-export` | Offline rasterizer (`ab_glyph`) with Alpha-blended Zalgo compositing, lossless MP4 muxer (FFmpeg subprocess). |
 | `af-app` | Application entry point, thread orchestration, auto-generative mapper, and batch pipeline director. |
 
@@ -99,7 +99,6 @@ classcii --batch-folder ./media/ --preset 02_matrix
 |------|-------------|---------|
 | `--image <PATH>` | Source: static image (PNG, JPEG, BMP, GIF) | — |
 | `--video <PATH>` | Source: video file (requires `--features video`) | — |
-| `--webcam` | Source: webcam feed (requires `--features webcam`) | `false` |
 | `--procedural <TYPE>` | Source: generator (`noise`, `plasma`, `particles`, `starfield`) | — |
 | `--audio <PATH\|mic>` | Audio source: file path or `mic` for microphone | — |
 | `--batch-folder <DIR>` | Batch export: media folder (images + videos) | — |
