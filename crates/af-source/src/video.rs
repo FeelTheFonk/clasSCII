@@ -312,6 +312,12 @@ fn process_commands(
             }
             Ok(VideoCommand::Resize(nw, nh)) => {
                 if nw > 0 && nh > 0 && (nw != state.w || nh != state.h) {
+                    // Preserve playback position through resize (mirrors Seek handler)
+                    state.pipe_start_secs = clock.map_or(
+                        state.current_pos_secs(f64::from(state.target_fps)),
+                        MediaClock::pos_secs,
+                    );
+                    state.frames_read = 0;
                     state.w = nw;
                     state.h = nh;
                     state.pool.clear();
@@ -319,7 +325,10 @@ fn process_commands(
                         state.pool.push(Arc::new(FrameBuffer::new(nw, nh)));
                     }
                     need_restart = true;
-                    log::debug!("Thread vidéo: Resize -> {nw}x{nh}");
+                    log::debug!(
+                        "Thread vidéo: Resize -> {nw}x{nh} @ {:.1}s",
+                        state.pipe_start_secs
+                    );
                 }
             }
             Err(flume::TryRecvError::Empty) => return false,

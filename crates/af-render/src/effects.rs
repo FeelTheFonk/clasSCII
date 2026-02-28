@@ -131,7 +131,7 @@ pub fn apply_glow(grid: &mut AsciiGrid, intensity: f32, brightness_buf: &mut Vec
                 .max(brightness_buf[idx(cx - 1, cy + 1)])
                 .max(brightness_buf[idx(cx + 1, cy + 1)]);
 
-            if max_neighbor > 200 {
+            if max_neighbor > 140 {
                 let cell = grid.get(cx, cy);
                 let fg = (
                     cell.fg.0.saturating_add(glow_factor),
@@ -210,11 +210,11 @@ pub fn apply_chromatic_aberration(
     }
 }
 
-/// Apply wave distortion: horizontally shift rows with a sinusoidal pattern.
+/// Apply wave distortion: horizontally shift rows with a smooth sinusoidal pattern.
 ///
-/// `amplitude` [0.0, 1.0] — fraction of grid width.
-/// `speed` — frequency multiplier.
-/// `phase` — offset (driven by audio beat_phase or time).
+/// `amplitude` [0.0, 1.0] — wave strength (max shift = amplitude * 8 cells).
+/// `speed` — spatial frequency multiplier (waves per grid height).
+/// `phase` — temporal phase offset (driven by persistent wave_phase + audio beat_phase).
 /// `row_buf` — pre-allocated buffer, resized internally if needed.
 pub fn apply_wave_distortion(
     grid: &mut AsciiGrid,
@@ -223,35 +223,35 @@ pub fn apply_wave_distortion(
     phase: f32,
     row_buf: &mut Vec<AsciiCell>,
 ) {
+    // Cap max shift to 8 cells (not grid width) for smooth, non-jarring motion
+    const MAX_WAVE_SHIFT: f32 = 8.0;
+
     if amplitude < 0.001 {
         return;
     }
 
     let w = grid.width;
     let h = grid.height;
-    let wf = f32::from(w);
     let hf = f32::from(h);
 
     row_buf.resize(usize::from(w), AsciiCell::default());
 
     for y in 0..h {
         let yf = f32::from(y);
-        let shift =
-            (amplitude * wf * (std::f32::consts::TAU * speed * yf / hf + phase).sin()) as i16;
+        let shift = (amplitude
+            * MAX_WAVE_SHIFT
+            * (std::f32::consts::TAU * speed * yf / hf + phase).sin()) as i16;
 
         // Copy row to buffer
         for x in 0..w {
             row_buf[usize::from(x)] = *grid.get(x, y);
         }
 
-        // Write shifted
+        // Write shifted with wrapping (no blank gaps)
+        let w_i32 = i32::from(w);
         for x in 0..w {
-            let src_x = i32::from(x) - i32::from(shift);
-            if src_x >= 0 && src_x < i32::from(w) {
-                grid.set(x, y, row_buf[src_x as usize]);
-            } else {
-                grid.set(x, y, AsciiCell::default());
-            }
+            let src_x = ((i32::from(x) - i32::from(shift)) % w_i32 + w_i32) % w_i32;
+            grid.set(x, y, row_buf[src_x as usize]);
         }
     }
 }

@@ -147,7 +147,7 @@ impl Default for CreationEngine {
 }
 
 /// Total number of modulatable effects.
-pub const NUM_EFFECTS: usize = 8;
+pub const NUM_EFFECTS: usize = 9;
 
 /// Effect names for the UI.
 pub const EFFECT_NAMES: [&str; NUM_EFFECTS] = [
@@ -158,6 +158,7 @@ pub const EFFECT_NAMES: [&str; NUM_EFFECTS] = [
     "Wave",
     "Color Pulse",
     "Scan Lines",
+    "Zalgo",
     "Strobe Decay",
 ];
 
@@ -211,6 +212,7 @@ impl CreationEngine {
                 config.fade_decay = (audio.rms * 0.4 * mi).clamp(0.0, 1.0);
                 config.glow_intensity = (audio.mid * 0.5 * mi).clamp(0.0, 2.0);
                 config.color_pulse_speed = 0.0;
+                config.zalgo_intensity = (onset_envelope * 2.5 * mi).clamp(0.0, 5.0);
             }
             CreationPreset::Psychedelic => {
                 // Everything cranked — fast color rotation, heavy visual artifacts
@@ -221,6 +223,7 @@ impl CreationEngine {
                 config.beat_flash_intensity = (onset_envelope * 1.0 * mi).clamp(0.0, 2.0);
                 config.glow_intensity = (audio.rms * 1.2 * mi).clamp(0.0, 2.0);
                 config.fade_decay = (audio.spectral_centroid * 0.6 * mi).clamp(0.0, 1.0);
+                config.zalgo_intensity = (audio.spectral_flux * 2.0 * mi).clamp(0.0, 5.0);
                 let scan = (audio.presence * 4.0 * mi) as u8;
                 config.scanline_gap = if scan >= 2 { scan.min(8) } else { 0 };
             }
@@ -250,7 +253,8 @@ impl CreationEngine {
             4 => config.wave_amplitude,
             5 => config.color_pulse_speed,
             6 => f32::from(config.scanline_gap),
-            7 => config.strobe_decay,
+            7 => config.zalgo_intensity,
+            8 => config.strobe_decay,
             _ => 0.0,
         }
     }
@@ -260,9 +264,9 @@ impl CreationEngine {
     pub fn effect_max(&self, idx: usize) -> f32 {
         match idx {
             0 | 2 => 2.0,
-            3 | 5 => 5.0,
+            3 | 5 | 7 => 5.0,
             6 => 8.0,
-            7 => 0.99,
+            8 => 0.99,
             _ => 1.0,
         }
     }

@@ -186,6 +186,7 @@ pub fn run_batch_export(
         let mut effect_row_buf: Vec<AsciiCell> = Vec::new();
         let mut onset_envelope: f32 = 0.0;
         let mut color_pulse_phase: f32 = 0.0;
+        let mut wave_phase: f32 = 0.0;
 
         // === Pre-allocated charset pool (avoid per-beat .to_string()) ===
         let charset_pool: [&str; 10] = [
@@ -298,12 +299,18 @@ pub fn run_batch_export(
                         % 1.0;
                 }
 
-                // 1. Wave distortion
+                // 1. Wave distortion (persistent phase + beat modulator)
+                if frame_config.wave_amplitude > 0.001 {
+                    wave_phase = (wave_phase + frame_config.wave_speed / target_fps as f32)
+                        % std::f32::consts::TAU;
+                }
+                let wave_phase_total =
+                    wave_phase + current_features.beat_phase * std::f32::consts::TAU * 0.5;
                 af_render::effects::apply_wave_distortion(
                     &mut grid,
                     frame_config.wave_amplitude,
                     frame_config.wave_speed,
-                    current_features.beat_phase * std::f32::consts::TAU,
+                    wave_phase_total,
                     &mut effect_row_buf,
                 );
 

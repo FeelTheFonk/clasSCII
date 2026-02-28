@@ -137,10 +137,14 @@ pub struct App {
     pub onset_envelope: f32,
     /// Color pulse accumulated phase [0.0, 1.0).
     pub color_pulse_phase: f32,
+    /// Persistent wave distortion phase (advances per frame).
+    pub wave_phase: f32,
     /// Per-mapping EMA smooth state for audio mappings.
     pub mapping_smooth_state: Vec<f32>,
     /// Creation mode engine for automated audio-reactive effects.
     pub creation_engine: CreationEngine,
+    /// Whether creation mode modulation is active (independent of overlay visibility).
+    pub creation_mode_active: bool,
     /// Scratch RenderConfig reused each frame (avoids per-frame Vec/String alloc).
     pub render_config_scratch: RenderConfig,
 }
@@ -212,8 +216,10 @@ impl App {
             effect_row_buf: Vec::new(),
             onset_envelope: 0.0,
             color_pulse_phase: 0.0,
+            wave_phase: 0.0,
             mapping_smooth_state: Vec::new(),
             creation_engine: CreationEngine::default(),
+            creation_mode_active: false,
             render_config_scratch: RenderConfig::default(),
         })
     }
@@ -329,8 +335,8 @@ impl App {
                     }
                 }
 
-                // Creation mode modulation (after compositor, before effects)
-                if self.state == AppState::CreationMode {
+                // Creation mode modulation (runs even when overlay is hidden)
+                if self.creation_mode_active {
                     let image_feats = crate::creation::compute_image_features(&self.grid);
                     let dt = 1.0 / render_config.target_fps as f32;
                     if let Some(ref features) = audio_features {
@@ -351,14 +357,21 @@ impl App {
                         % 1.0;
                 }
 
-                // 1. Wave distortion (spatial — before color effects)
+                // 1. Wave distortion (persistent phase + beat modulator)
+                if render_config.wave_amplitude > 0.001 {
+                    self.wave_phase = (self.wave_phase
+                        + render_config.wave_speed / render_config.target_fps as f32)
+                        % std::f32::consts::TAU;
+                }
+                let wave_phase_total = self.wave_phase
+                    + audio_features
+                        .as_ref()
+                        .map_or(0.0, |f| f.beat_phase * std::f32::consts::TAU * 0.5);
                 af_render::effects::apply_wave_distortion(
                     &mut self.grid,
                     render_config.wave_amplitude,
                     render_config.wave_speed,
-                    audio_features
-                        .as_ref()
-                        .map_or(0.0, |f| f.beat_phase * std::f32::consts::TAU),
+                    wave_phase_total,
                     &mut self.effect_row_buf,
                 );
 
@@ -456,6 +469,7 @@ impl App {
                 None
             };
 
+            let creation_mode_active = self.creation_mode_active;
             terminal.draw(|frame| {
                 af_render::ui::draw(
                     frame,
@@ -471,6 +485,7 @@ impl App {
                     layout_charset_edit,
                     layout_audio_panel,
                     layout_creation.as_ref(),
+                    creation_mode_active,
                 );
             })?;
             self.sidebar_dirty = false;
@@ -568,7 +583,7 @@ impl App {
                 ) => self.handle_render_key(code),
                 KeyCode::Char(
                     'f' | 'F' | 'g' | 'G' | 'r' | 'R' | 'w' | 'W' | 'h' | 'H' | 'l' | 'L' | 't'
-                    | 'T',
+                    | 'T' | 'z' | 'Z',
                 ) => self.handle_effect_key(code),
                 KeyCode::Up | KeyCode::Down | KeyCode::Left | KeyCode::Right => {
                     self.handle_playback_key(code);
@@ -862,6 +877,12 @@ impl App {
             KeyCode::Char('p') => {
                 self.creation_engine.active_preset = self.creation_engine.active_preset.next();
             }
+            KeyCode::Char('q') => {
+                // Fully deactivate creation mode
+                self.creation_mode_active = false;
+                self.state = AppState::Running;
+                self.sidebar_dirty = true;
+            }
             _ => {}
         }
     }
@@ -881,7 +902,8 @@ impl App {
                 let v = (f32::from(c.scanline_gap) + delta * 10.0).clamp(0.0, max) as u8;
                 c.scanline_gap = v;
             }
-            7 => c.strobe_decay = (c.strobe_decay + delta).clamp(0.0, max),
+            7 => c.zalgo_intensity = (c.zalgo_intensity + delta * 5.0).clamp(0.0, max),
+            8 => c.strobe_decay = (c.strobe_decay + delta).clamp(0.0, max),
             _ => {}
         });
     }
@@ -1013,7 +1035,18 @@ impl App {
                 self.sidebar_dirty = true;
             }
             KeyCode::Char('K') => {
-                self.state = AppState::CreationMode;
+                if self.creation_mode_active {
+                    // Toggle overlay visibility (modulation continues)
+                    if self.state == AppState::CreationMode {
+                        self.state = AppState::Running;
+                    } else {
+                        self.state = AppState::CreationMode;
+                    }
+                } else {
+                    // Activate creation mode + open overlay
+                    self.creation_mode_active = true;
+                    self.state = AppState::CreationMode;
+                }
                 self.sidebar_dirty = true;
             }
             KeyCode::Char('n') => {
@@ -1090,6 +1123,16 @@ impl App {
             KeyCode::Char('T') => {
                 self.toggle_config(|c| {
                     c.beat_flash_intensity = (c.beat_flash_intensity + 0.1).min(2.0);
+                });
+            }
+            KeyCode::Char('z') => {
+                self.toggle_config(|c| {
+                    c.zalgo_intensity = (c.zalgo_intensity - 0.5).max(0.0);
+                });
+            }
+            KeyCode::Char('Z') => {
+                self.toggle_config(|c| {
+                    c.zalgo_intensity = (c.zalgo_intensity + 0.5).min(5.0);
                 });
             }
             _ => {}
@@ -1463,6 +1506,11 @@ impl App {
                 new_cfg.fullscreen = old_cfg.fullscreen;
                 new_cfg.show_spectrum = old_cfg.show_spectrum;
 
+                // Only force resize if pixel dimensions would change
+                let needs_resize = old_cfg.render_mode != new_cfg.render_mode
+                    || (old_cfg.density_scale - new_cfg.density_scale).abs() > f32::EPSILON
+                    || (old_cfg.aspect_ratio - new_cfg.aspect_ratio).abs() > f32::EPSILON;
+
                 self.config.store(Arc::new(new_cfg));
                 // Recalculate rows if audio panel is open (even barely)
                 let new_len = self.config.load().audio_mappings.len();
@@ -1473,7 +1521,9 @@ impl App {
                     .min(self.audio_panel.total_rows.saturating_sub(1));
 
                 self.sidebar_dirty = true;
-                self.terminal_size = (0, 0); // Force redraw / reallocation au cas où le mode de rendu (Braille/Ascii) ait changé.
+                if needs_resize {
+                    self.terminal_size = (0, 0);
+                }
                 log::info!("Preset chargé à vif : {}", path.display());
             }
             Err(e) => {

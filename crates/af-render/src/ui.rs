@@ -67,6 +67,7 @@ pub fn draw(
     layout_charset_edit: Option<(&str, usize)>,
     layout_audio_panel: Option<(&AudioPanelState, &RenderConfig)>,
     layout_creation: Option<&CreationOverlayData<'_>>,
+    creation_mode_active: bool,
 ) {
     let area = frame.area();
 
@@ -122,6 +123,7 @@ pub fn draw(
             loaded_visual,
             loaded_audio,
             state,
+            creation_mode_active,
         );
     }
 
@@ -226,6 +228,7 @@ fn draw_sidebar(
     loaded_visual: Option<&str>,
     loaded_audio: Option<&str>,
     state: &RenderState,
+    creation_mode_active: bool,
 ) {
     let mode_str = match config.render_mode {
         af_core::config::RenderMode::Ascii => "ASCII",
@@ -357,6 +360,7 @@ fn draw_sidebar(
         kv_line("[w/W]", "Wave", &fmt!("{:.2}", config.wave_amplitude)),
         kv_line("[h/H]", "Pulse", &fmt!("{:.1}", config.color_pulse_speed)),
         kv_line("[l/L]", "Scan", &scan_str),
+        kv_line("[z/Z]", "Zalgo", &fmt!("{:.1}", config.zalgo_intensity)),
         // ─── Audio ──────────────
         Line::from(Span::styled(
             "─── Audio ──────────",
@@ -414,10 +418,15 @@ fn draw_sidebar(
     }
 
     lines.push(Line::from(""));
-    lines.push(Line::from(Span::styled(
-        " o/O=open C=char A=mix",
-        Style::default().fg(label),
-    )));
+    let creation_indicator = if creation_mode_active {
+        Span::styled(" K\u{25cf}", Style::default().fg(Color::Cyan))
+    } else {
+        Span::styled(" K\u{25cb}", Style::default().fg(label))
+    };
+    lines.push(Line::from(vec![
+        Span::styled(" o/O=open C=char A=mix", Style::default().fg(label)),
+        creation_indicator,
+    ]));
 
     let sidebar =
         Paragraph::new(lines).block(Block::default().borders(Borders::LEFT).title(" Params "));
@@ -469,6 +478,11 @@ fn draw_help_overlay(frame: &mut Frame, area: Rect) {
         Line::from(" w/W      Wave ±"),
         Line::from(" h/H      Color pulse ±"),
         Line::from(" l/L      Scan lines"),
+        Line::from(" z/Z      Zalgo ±"),
+        Line::from(Span::styled(
+            " Color FX best in ASCII/Quadrant",
+            Style::default().fg(Color::DarkGray),
+        )),
         Line::from(Span::styled(
             " ── Audio ───────",
             Style::default().fg(Color::Yellow),
@@ -485,7 +499,7 @@ fn draw_help_overlay(frame: &mut Frame, area: Rect) {
         Line::from(" O        Open audio"),
         Line::from(" C        Charset editor"),
         Line::from(" A        Audio mixer"),
-        Line::from(" K        Creation mode"),
+        Line::from(" K        Creation (Esc=hide q=off)"),
         Line::from(" x        Fullscreen"),
         Line::from(""),
         Line::from(Span::styled(
@@ -866,7 +880,7 @@ fn draw_creation_overlay(
     // Footer
     lines.push(Line::from(""));
     lines.push(Line::from(Span::styled(
-        "  [\u{2191}\u{2193}] Select  [\u{2190}\u{2192}] Master  [a] Auto  [p] Preset  [Esc] Close",
+        " [\u{2191}\u{2193}] Select [\u{2190}\u{2192}] Adjust [a] Auto [p] Preset [Esc] Hide [q] Off",
         Style::default().fg(Color::DarkGray),
     )));
 
