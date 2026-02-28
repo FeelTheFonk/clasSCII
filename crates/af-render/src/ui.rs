@@ -68,6 +68,7 @@ pub fn draw(
     layout_audio_panel: Option<(&AudioPanelState, &RenderConfig)>,
     layout_creation: Option<&CreationOverlayData<'_>>,
     creation_mode_active: bool,
+    perf_warning: bool,
 ) {
     let area = frame.area();
 
@@ -124,6 +125,7 @@ pub fn draw(
             loaded_audio,
             state,
             creation_mode_active,
+            perf_warning,
         );
     }
 
@@ -229,6 +231,7 @@ fn draw_sidebar(
     loaded_audio: Option<&str>,
     state: &RenderState,
     creation_mode_active: bool,
+    perf_warning: bool,
 ) {
     let mode_str = match config.render_mode {
         af_core::config::RenderMode::Ascii => "ASCII",
@@ -397,7 +400,14 @@ fn draw_sidebar(
         "─── Info ───────────",
         Style::default().fg(section),
     )));
-    lines.push(Line::from(fmt!(" {:.0} FPS", fps_counter.fps())));
+    if perf_warning {
+        lines.push(Line::from(vec![
+            Span::styled(fmt!(" {:.0} FPS ", fps_counter.fps()), Style::default()),
+            Span::styled("!", Style::default().fg(Color::Yellow)),
+        ]));
+    } else {
+        lines.push(Line::from(fmt!(" {:.0} FPS", fps_counter.fps())));
+    }
     lines.push(Line::from(fmt!(" {:.1}ms", fps_counter.frame_time_ms)));
 
     let truncate = |name: &str, max: usize| -> String {
@@ -773,29 +783,16 @@ fn draw_creation_overlay(
 ) {
     let mut lines: Vec<Line<'_>> = Vec::with_capacity(24);
 
-    // Header
-    let auto_str = if creation.auto_mode { "ON" } else { "OFF" };
-    let auto_color = if creation.auto_mode {
-        Color::Green
+    // Header — [AUTO] / [MANUAL] indicator
+    let (mode_label, mode_color) = if creation.auto_mode {
+        ("[AUTO]", Color::Green)
     } else {
-        Color::Red
+        ("[MANUAL]", Color::Red)
     };
-    let bar_len = (creation.master_intensity / 2.0 * 10.0) as usize;
-    let master_bar: String =
-        "\u{2588}".repeat(bar_len) + &"\u{2591}".repeat(10_usize.saturating_sub(bar_len));
 
     lines.push(Line::from(vec![
-        Span::styled("  [a] AUTO: ", Style::default().fg(Color::Gray)),
-        Span::styled(auto_str, Style::default().fg(auto_color)),
-        Span::styled("    Master: ", Style::default().fg(Color::Gray)),
-        Span::styled(master_bar, Style::default().fg(Color::Cyan)),
-        Span::styled(
-            format!(" [{:.1}]", creation.master_intensity),
-            Style::default().fg(Color::White),
-        ),
-    ]));
-
-    lines.push(Line::from(vec![
+        Span::styled("  [a] ", Style::default().fg(Color::Gray)),
+        Span::styled(mode_label, Style::default().fg(mode_color)),
         Span::styled("  [p] Preset: ", Style::default().fg(Color::Gray)),
         Span::styled(creation.preset_name, Style::default().fg(Color::Yellow)),
     ]));
@@ -806,7 +803,7 @@ fn draw_creation_overlay(
         Style::default().fg(Color::DarkGray),
     )));
 
-    // Effects list
+    // Effects list (index 0 = Master, 1-9 = effects)
     for (i, (name, value, max)) in creation.effects.iter().enumerate() {
         let selected = i == creation.selected_effect;
         let prefix = if selected { " \u{25b8} " } else { "   " };
@@ -815,18 +812,22 @@ fn draw_creation_overlay(
         } else {
             0
         };
+        let bar_color = if i == 0 { Color::Cyan } else { Color::Green };
         let bar: String =
             "\u{2588}".repeat(bar_len) + &"\u{2591}".repeat(10_usize.saturating_sub(bar_len));
         let name_color = if selected { Color::White } else { Color::Gray };
+        // Auto-modulated indicator: ~ for effects (not Master) when auto is on
+        let auto_mark = if i > 0 && creation.auto_mode { "~" } else { "" };
 
         lines.push(Line::from(vec![
             Span::styled(prefix, Style::default().fg(Color::Cyan)),
             Span::styled(format!("{name:<12}"), Style::default().fg(name_color)),
-            Span::styled(bar, Style::default().fg(Color::Green)),
+            Span::styled(bar, Style::default().fg(bar_color)),
             Span::styled(
                 format!(" {value:.1}/{max:.1}"),
                 Style::default().fg(Color::White),
             ),
+            Span::styled(auto_mark, Style::default().fg(Color::DarkGray)),
         ]));
     }
 

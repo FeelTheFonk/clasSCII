@@ -196,7 +196,7 @@ Presets are auto-discovered by alphabetical order. Use the format `NN_name.toml`
 |-----------|--------|
 | `target_fps` | 60 = smooth but CPU-intensive, 30 = lower load |
 | `density_scale` | > 1.0 increases character count quadratically |
-| `shape_matching` | ~3× slower than simple luminance mapping |
+| `shape_matching` | ~3× slower than simple luminance mapping. Auto-disabled on grids >10k cells (300×100+). |
 | Render mode | Ascii is fastest; Octant is most complex (2×4 sub-pixels per cell) |
 | `dither_mode` | Minimal performance difference between modes |
 | Number of mappings | Linear cost — 10+ mappings negligible |

@@ -27,7 +27,7 @@ Audio runs on a dedicated thread. Features are published via a lock-free `triple
 
 ---
 
-## 19 Audio Sources
+## 21 Audio Sources
 
 ### Amplitude
 
@@ -57,6 +57,7 @@ Audio runs on a dedicated thread. Features are published via a lock-free `triple
 | `spectral_centroid` | 0.0–1.0 | Frequency center of mass. High = bright/trebly sound, Low = dark/bassy. Perceptual timbral brightness. |
 | `spectral_flux` | 0.0–1.0 | Frame-to-frame spectral change. High during transients, attacks, genre transitions. Good for triggering dynamic effects. |
 | `spectral_flatness` | 0.0–1.0 | Noise vs tonal ratio. 1.0 = white noise, 0.0 = pure tone. Distinguishes noise from pitched content. |
+| `spectral_rolloff` | 0.0–1.0 | Frequency below which 85% of spectral energy is concentrated. O(n) single-pass cumsum. High = bright/trebly content, Low = bass-heavy. Useful for adaptive brightness or timbral filtering. |
 
 ### Beat & Rhythm
 
@@ -76,6 +77,12 @@ Derived from 26 Mel-spaced triangular filters (300–8000 Hz), compressed via DC
 |--------|-------|-------------|
 | `timbral_brightness` | 0.0–1.0 | High-frequency energy ratio in the Mel spectrum. Reacts to instrument brightness — a guitar vs a flute, clean vs distorted. |
 | `timbral_roughness` | 0.0–1.0 | Spectral irregularity across Mel bands. High for harsh/distorted sounds, low for smooth/clean tones. |
+
+### Signal Analysis
+
+| Source | Range | Description |
+|--------|-------|-------------|
+| `zero_crossing_rate` | 0.0–1.0 | Normalized sign-change count on raw audio samples. High for percussive/noise content, low for tonal/harmonic content. Useful for distinguishing speech from music, or drums from sustained notes. |
 
 ---
 
@@ -289,6 +296,19 @@ smoothing = 0.2    # Faster response than global
 
 Use lower smoothing for beat-driven mappings (fast attack needed) and higher smoothing for ambient modulation (prevent jitter).
 
+### Adaptive Per-Band Smoothing
+
+The internal feature smoother applies frequency-aware multipliers to the global smoothing value:
+
+| Band Category | Multiplier | Rationale |
+|---------------|------------|-----------|
+| Sub-bass, Bass | ×1.3 | Slower response — prevents jittery bass modulation |
+| Mid, Low-mid | ×1.0 | Neutral — standard smoothing |
+| High-mid, Presence, Brilliance | ×0.7 | Faster response — high frequencies need quick tracking |
+| Beat, Onset, Events | ×0.5 | Fastest — transient events must not be smoothed away |
+
+This is automatic and requires no configuration. Per-mapping `smoothing` overrides still take priority.
+
 ---
 
 ## Audio Mixer Panel
@@ -311,7 +331,7 @@ Press `A` to open the Audio Mixer panel — a TUI editor for audio mappings.
 | Column | Content | Edit Action |
 |--------|---------|------------|
 | Enabled | `[x]` / `[ ]` | Toggle on/off |
-| Source | Audio source name | Cycle through 19 sources |
+| Source | Audio source name | Cycle through 21 sources |
 | Target | Visual target name | Cycle through 14 targets |
 | Amount | Multiplier value | Increment/decrement |
 | Offset | Additive offset | Increment/decrement |

@@ -41,27 +41,37 @@ impl FeatureSmoother {
 
         let mut smoothed = *current;
 
-        // Per-field smoothing with attack/release
+        // Adaptive smoothing per frequency band category:
+        // Low = ×1.3 (slower), Mid = ×1.0, High = ×0.7 (faster), Events = ×0.5
         smoothed.rms = self.ar(current.rms, self.prev.rms);
         smoothed.peak = self.ar(current.peak, self.prev.peak);
-        smoothed.sub_bass = self.ar(current.sub_bass, self.prev.sub_bass);
-        smoothed.bass = self.ar(current.bass, self.prev.bass);
+        smoothed.sub_bass = self.ar_scaled(current.sub_bass, self.prev.sub_bass, 1.3);
+        smoothed.bass = self.ar_scaled(current.bass, self.prev.bass, 1.3);
         smoothed.low_mid = self.ar(current.low_mid, self.prev.low_mid);
         smoothed.mid = self.ar(current.mid, self.prev.mid);
-        smoothed.high_mid = self.ar(current.high_mid, self.prev.high_mid);
-        smoothed.presence = self.ar(current.presence, self.prev.presence);
-        smoothed.brilliance = self.ar(current.brilliance, self.prev.brilliance);
+        smoothed.high_mid = self.ar_scaled(current.high_mid, self.prev.high_mid, 0.7);
+        smoothed.presence = self.ar_scaled(current.presence, self.prev.presence, 0.7);
+        smoothed.brilliance = self.ar_scaled(current.brilliance, self.prev.brilliance, 0.7);
         smoothed.spectral_centroid =
             self.ar(current.spectral_centroid, self.prev.spectral_centroid);
         smoothed.spectral_flux = self.ar(current.spectral_flux, self.prev.spectral_flux);
         smoothed.spectral_flatness =
             self.ar(current.spectral_flatness, self.prev.spectral_flatness);
         smoothed.bpm = self.ar(current.bpm, self.prev.bpm);
-        smoothed.beat_intensity = self.ar(current.beat_intensity, self.prev.beat_intensity);
+        smoothed.beat_intensity =
+            self.ar_scaled(current.beat_intensity, self.prev.beat_intensity, 0.5);
         smoothed.timbral_brightness =
             self.ar(current.timbral_brightness, self.prev.timbral_brightness);
         smoothed.timbral_roughness =
             self.ar(current.timbral_roughness, self.prev.timbral_roughness);
+        smoothed.spectral_rolloff = self.ar(current.spectral_rolloff, self.prev.spectral_rolloff);
+        smoothed.zero_crossing_rate = self.ar_scaled(
+            current.zero_crossing_rate,
+            self.prev.zero_crossing_rate,
+            0.7,
+        );
+        smoothed.onset_envelope =
+            self.ar_scaled(current.onset_envelope, self.prev.onset_envelope, 0.5);
 
         // Events: no smoothing
         smoothed.onset = current.onset;
@@ -85,6 +95,19 @@ impl FeatureSmoother {
         } else {
             self.release
         };
+        alpha * current + (1.0 - alpha) * previous
+    }
+
+    /// Attack/release smoothing with per-band scaling factor.
+    /// `scale` < 1.0 = faster response, > 1.0 = slower response.
+    #[inline(always)]
+    fn ar_scaled(&self, current: f32, previous: f32, scale: f32) -> f32 {
+        let base = if current > previous {
+            self.attack
+        } else {
+            self.release
+        };
+        let alpha = (base * scale).clamp(0.01, 1.0);
         alpha * current + (1.0 - alpha) * previous
     }
 }

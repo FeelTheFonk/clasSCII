@@ -44,7 +44,8 @@ sensitivity = 0.5
 # Sources: rms, peak, sub_bass, bass, low_mid, mid, high_mid, presence,
 #          brilliance, spectral_centroid, spectral_flux, spectral_flatness,
 #          onset, beat_intensity, beat_phase, bpm, timbral_brightness,
-#          timbral_roughness, onset_envelope
+#          timbral_roughness, onset_envelope, spectral_rolloff,
+#          zero_crossing_rate
 # Targets: edge_threshold, edge_mix, contrast, brightness, saturation,
 #          density_scale, invert, zalgo_intensity, beat_flash_intensity,
 #          chromatic_offset, wave_amplitude, color_pulse_speed, fade_decay,

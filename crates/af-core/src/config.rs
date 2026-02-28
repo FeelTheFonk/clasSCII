@@ -117,6 +117,8 @@ pub const AUDIO_SOURCES: &[&str] = &[
     "timbral_brightness",
     "timbral_roughness",
     "onset_envelope",
+    "spectral_rolloff",
+    "zero_crossing_rate",
 ];
 
 pub const AUDIO_TARGETS: &[&str] = &[
@@ -217,7 +219,7 @@ pub enum RenderMode {
 /// let mode = ColorMode::default();
 /// assert!(matches!(mode, ColorMode::HsvBright));
 /// ```
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
 pub enum ColorMode {
     /// RGB direct du pixel source.
     Direct,

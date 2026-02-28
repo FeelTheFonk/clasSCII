@@ -60,8 +60,36 @@ pub fn extract_features(samples: &[f32], spectrum: &[f32], sample_rate: u32) -> 
             features.spectral_flatness = (geo_mean / arith_mean).clamp(0.0, 1.0);
         }
 
+        // Spectral rolloff (85% energy threshold)
+        if total_energy > 1e-10 {
+            let threshold = total_energy * 0.85;
+            let mut cumsum = 0.0f32;
+            let mut rolloff_bin = spectrum.len() - 1;
+            for (i, &mag) in spectrum.iter().enumerate() {
+                cumsum += mag;
+                if cumsum >= threshold {
+                    rolloff_bin = i;
+                    break;
+                }
+            }
+            let max_bin = spectrum.len().saturating_sub(1).max(1) as f32;
+            features.spectral_rolloff = (rolloff_bin as f32 / max_bin).clamp(0.0, 1.0);
+        }
+
         // Spectrum bands (32 log-frequency bands)
         fill_spectrum_bands(spectrum, bin_hz, &mut features.spectrum_bands);
+    }
+
+    // Zero crossing rate (on raw samples)
+    if samples.len() > 1 {
+        let mut crossings = 0u32;
+        for w in samples.windows(2) {
+            if (w[0] >= 0.0) != (w[1] >= 0.0) {
+                crossings += 1;
+            }
+        }
+        features.zero_crossing_rate =
+            (crossings as f32 / (samples.len() - 1) as f32).clamp(0.0, 1.0);
     }
 
     // MFCC fields are computed externally by MelFilterbank (stateful)

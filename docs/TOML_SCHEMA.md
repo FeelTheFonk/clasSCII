@@ -125,9 +125,9 @@ Repeatable section. Each entry defines one audio-to-visual parameter mapping.
 | `curve` | String | `"Linear"`, `"Exponential"`, `"Threshold"`, `"Smooth"` | `"Linear"` | Response curve |
 | `smoothing` | Float | 0.0–1.0 | global value | Per-mapping EMA override |
 
-#### Valid Sources (19)
+#### Valid Sources (21)
 
-`rms`, `peak`, `sub_bass`, `bass`, `low_mid`, `mid`, `high_mid`, `presence`, `brilliance`, `spectral_centroid`, `spectral_flux`, `spectral_flatness`, `beat_intensity`, `onset`, `beat_phase`, `bpm`, `timbral_brightness`, `timbral_roughness`, `onset_envelope`
+`rms`, `peak`, `sub_bass`, `bass`, `low_mid`, `mid`, `high_mid`, `presence`, `brilliance`, `spectral_centroid`, `spectral_flux`, `spectral_flatness`, `spectral_rolloff`, `beat_intensity`, `onset`, `beat_phase`, `bpm`, `timbral_brightness`, `timbral_roughness`, `onset_envelope`, `zero_crossing_rate`
 
 #### Valid Targets (14)
 

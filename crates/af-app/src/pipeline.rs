@@ -157,6 +157,8 @@ pub fn apply_audio_mappings(
             "timbral_brightness" => features.timbral_brightness,
             "timbral_roughness" => features.timbral_roughness,
             "onset_envelope" => onset_envelope,
+            "spectral_rolloff" => features.spectral_rolloff,
+            "zero_crossing_rate" => features.zero_crossing_rate,
             _ => 0.0,
         };
 

@@ -122,14 +122,11 @@ pub fn apply_glow(grid: &mut AsciiGrid, intensity: f32, brightness_buf: &mut Vec
     for cy in 1..h.saturating_sub(1) {
         for cx in 1..w.saturating_sub(1) {
             let idx = |x: u16, y: u16| usize::from(y) * usize::from(w) + usize::from(x);
+            // 4-cardinal neighbors only (skip diagonals for ~50% fewer lookups)
             let max_neighbor = brightness_buf[idx(cx - 1, cy)]
                 .max(brightness_buf[idx(cx + 1, cy)])
                 .max(brightness_buf[idx(cx, cy - 1)])
-                .max(brightness_buf[idx(cx, cy + 1)])
-                .max(brightness_buf[idx(cx - 1, cy - 1)])
-                .max(brightness_buf[idx(cx + 1, cy - 1)])
-                .max(brightness_buf[idx(cx - 1, cy + 1)])
-                .max(brightness_buf[idx(cx + 1, cy + 1)]);
+                .max(brightness_buf[idx(cx, cy + 1)]);
 
             if max_neighbor > 140 {
                 let cell = grid.get(cx, cy);
@@ -268,6 +265,10 @@ pub fn apply_color_pulse(grid: &mut AsciiGrid, hue_shift: f32) {
         for cx in 0..grid.width {
             let cell = grid.get(cx, cy);
             if cell.ch == ' ' {
+                continue;
+            }
+            // Skip black cells — no hue to rotate, saves HSV conversion
+            if cell.fg.0 == 0 && cell.fg.1 == 0 && cell.fg.2 == 0 {
                 continue;
             }
 

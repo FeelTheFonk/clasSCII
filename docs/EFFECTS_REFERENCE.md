@@ -103,7 +103,7 @@ Rotates the hue of all colored cells over time using HSV color space manipulatio
 - `2.0–3.0` = fast hue cycling — psychedelic
 - `5.0` = very rapid rotation
 
-Requires color to be enabled. Works independently of `color_mode` — applied after color mapping.
+Requires color to be enabled. Works independently of `color_mode` — applied after color mapping. Black cells `(0,0,0)` are skipped (no HSV conversion needed), saving 30–60% of conversions on dark presets.
 
 ### 5. Fade Trails
 
@@ -179,7 +179,7 @@ Brightness bloom effect — bright cells bleed light into their neighbors.
 | Keybind | `g` (−0.1) / `G` (+0.1) |
 | Sidebar | Glow |
 
-A cell is considered "bright" if its maximum RGB component exceeds 140 (threshold lowered from 200 in v0.5.1 for wider visibility). Neighboring cells receive a brightness boost proportional to `glow_intensity`.
+A cell is considered "bright" if its maximum RGB component exceeds 140 (threshold lowered from 200 in v0.5.1 for wider visibility). The 4 cardinal neighbors (up/down/left/right) receive a brightness boost proportional to `glow_intensity`.
 
 - `0.0` = disabled
 - `0.3–0.7` = subtle bloom — adds warmth

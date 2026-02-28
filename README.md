@@ -165,7 +165,7 @@ source = "bass"            # Audio feature: rms, peak, sub_bass, bass, low_mid, 
                            # high_mid, presence, brilliance, spectral_centroid,
                            # spectral_flux, spectral_flatness, onset, beat_intensity,
                            # beat_phase, bpm, timbral_brightness, timbral_roughness,
-                           # onset_envelope
+                           # onset_envelope, spectral_rolloff, zero_crossing_rate
 target = "zalgo_intensity" # Visual target: edge_threshold, edge_mix, contrast,
                            # brightness, saturation, density_scale, invert,
                            # beat_flash_intensity, chromatic_offset, wave_amplitude,
@@ -196,16 +196,23 @@ Multiple mappings can be defined simultaneously. MFCC-derived timbral features (
 
 ## Creation Mode
 
-Press `K` to enter Creation Mode, an auto-modulation engine that drives all visual effects from audio features. Four presets adapt to the audio content:
+Press `K` to enter Creation Mode, an auto-modulation engine that drives all visual effects from audio features. Eleven presets adapt to the audio content:
 
 | Preset | Character |
 |--------|-----------|
 | Ambient | Slow oscillations, low intensity, drift-based |
-| Percussive | Beat-locked, aggressive strobe and wave |
+| Percussive | Beat-locked, aggressive strobe and wave, density pulse |
 | Psychedelic | High chromatic aberration, fast color pulse |
 | Cinematic | Smooth fade, wide glow, controlled dynamics |
+| Minimal | Single dominant effect, clean and focused |
+| Photoreal | Sharpest rendering, subtle audio response |
+| Abstract | Non-figurative cross-mapped effects, density modulation |
+| Glitch | Digital corruption, zalgo dominant, onset invert |
+| Lo-Fi | Vintage degraded, constant scan lines |
+| Spectral | Each frequency band drives a distinct effect |
+| Custom | Manual control only (no auto-modulation) |
 
-Navigation: `Up/Down` select effect, `Left/Right` adjust master intensity (auto) or selected effect (manual), `a` toggle auto/manual mode, `p` cycle preset, `Esc` exit.
+Navigation: `Up/Down` select effect (Master at top, then 9 effects), `Left/Right` always adjust the selected element, `a` toggle auto/manual mode, `p` cycle preset, `Esc` exit.
 
 ## R&D: Perceptual Color and Dithering
 
@@ -245,7 +252,7 @@ Configurations and presets are managed via TOML files. Audio mappings and charse
 - Zero panicking unwraps — `?` operator and graceful fallback implemented across all layers (R3).
 - Zero unnecessary copies — driven by `Arc<FrameBuffer>`, `arc-swap`, and lock-free `triple_buffer` mechanics (R4).
 - Compile strictness: `cargo clippy --workspace --features video -- -D warnings` passes 0 warnings with pedantic lints enabled.
-- 69 tests (unit + doctests) pass. `cargo fmt --check --all` clean.
+- 71 tests (unit + doctests) pass. `cargo fmt --check --all` clean.
 - All division operations guarded against zero. All user inputs clamped to valid ranges.
 - Release profile: LTO=fat, codegen-units=1, strip=symbols, panic=abort.
 

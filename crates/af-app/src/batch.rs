@@ -145,7 +145,8 @@ pub fn run_batch_export(
             "Étape 2/4 : Initialisation Media Folder {}",
             folder.display()
         );
-        let mut source = FolderBatchSource::new(folder, target_fps)?;
+        let total_frames_u32 = mapper.get_timeline().total_frames() as u32;
+        let mut source = FolderBatchSource::new(folder, target_fps, total_frames_u32)?;
 
         let (native_w, native_h) = source.native_size();
         let target_w = native_w.max(1280);
@@ -207,6 +208,12 @@ pub fn run_batch_export(
         let mut macro_mode_override: Option<af_core::config::RenderMode> = None;
         let mut macro_invert_override: Option<bool> = None;
         let mut macro_charset_override: Option<(usize, String)> = None;
+        // C.3: New macro-mutations
+        let mut macro_density_override: Option<f32> = None;
+        let mut macro_density_countdown: u32 = 0;
+        let mut macro_effect_burst: Option<(u8, f32)> = None; // (effect_id, value)
+        let mut macro_effect_countdown: u32 = 0;
+        let mut macro_color_mode_override: Option<af_core::config::ColorMode> = None;
 
         for frame_idx in 0..total_frames {
             let timestamp_secs = frame_idx as f64 * frame_duration;
@@ -219,7 +226,8 @@ pub fn run_batch_export(
             if current_features.onset && current_features.beat_intensity > 0.85 {
                 source.next_media();
 
-                if fastrand::f64() < 0.08 {
+                // Mode cycle (12%)
+                if fastrand::f64() < 0.12 {
                     let modes = [
                         af_core::config::RenderMode::Ascii,
                         af_core::config::RenderMode::HalfBlock,
@@ -235,12 +243,14 @@ pub fn run_batch_export(
                     macro_mode_override = Some(modes[(current_mode_idx + 1) % modes.len()].clone());
                 }
 
-                if fastrand::f64() < 0.06 {
+                // Invert flash (10%)
+                if fastrand::f64() < 0.10 {
                     let current = macro_invert_override.unwrap_or(frame_config.invert);
                     macro_invert_override = Some(!current);
                 }
 
-                if fastrand::f64() < 0.12 {
+                // Charset rotation (15%)
+                if fastrand::f64() < 0.15 {
                     let current_idx = macro_charset_override
                         .as_ref()
                         .map_or(frame_config.charset_index, |(i, _)| *i);
@@ -248,6 +258,49 @@ pub fn run_batch_export(
                     let mut new_charset = String::new();
                     new_charset.push_str(charset_pool[new_idx]);
                     macro_charset_override = Some((new_idx, new_charset));
+                }
+
+                // Density pulse (8%): 0.5 or 2.0 for 30 frames
+                if fastrand::f64() < 0.08 {
+                    macro_density_override = Some(if fastrand::bool() { 0.5 } else { 2.0 });
+                    macro_density_countdown = 30;
+                }
+
+                // Effect burst (6%): random effect boost for 60 frames
+                if fastrand::f64() < 0.06 {
+                    let bursts: [(u8, f32); 4] = [(0, 1.5), (1, 2.5), (2, 0.4), (3, 2.0)];
+                    let pick = bursts[fastrand::usize(0..bursts.len())];
+                    macro_effect_burst = Some(pick);
+                    macro_effect_countdown = 60;
+                }
+
+                // Color mode cycle (5%)
+                if fastrand::f64() < 0.05 {
+                    let modes = [
+                        af_core::config::ColorMode::Direct,
+                        af_core::config::ColorMode::HsvBright,
+                        af_core::config::ColorMode::Oklab,
+                        af_core::config::ColorMode::Quantized,
+                    ];
+                    let current = macro_color_mode_override
+                        .as_ref()
+                        .unwrap_or(&frame_config.color_mode);
+                    let idx = modes.iter().position(|m| m == current).unwrap_or(0);
+                    macro_color_mode_override = Some(modes[(idx + 1) % modes.len()].clone());
+                }
+            }
+
+            // Decay countdowns for temporary mutations
+            if macro_density_countdown > 0 {
+                macro_density_countdown -= 1;
+                if macro_density_countdown == 0 {
+                    macro_density_override = None;
+                }
+            }
+            if macro_effect_countdown > 0 {
+                macro_effect_countdown -= 1;
+                if macro_effect_countdown == 0 {
+                    macro_effect_burst = None;
                 }
             }
 
@@ -261,6 +314,21 @@ pub fn run_batch_export(
             if let Some((idx, ref chars)) = macro_charset_override {
                 frame_config.charset_index = idx;
                 frame_config.charset.clone_from(chars);
+            }
+            if let Some(density) = macro_density_override {
+                frame_config.density_scale = density;
+            }
+            if let Some((effect_id, value)) = macro_effect_burst {
+                match effect_id {
+                    0 => frame_config.glow_intensity = value,
+                    1 => frame_config.chromatic_offset = value,
+                    2 => frame_config.wave_amplitude = value,
+                    3 => frame_config.color_pulse_speed = value,
+                    _ => {}
+                }
+            }
+            if let Some(ref cm) = macro_color_mode_override {
+                frame_config.color_mode = cm.clone();
             }
 
             if let Some(src_frame) = source.next_frame() {

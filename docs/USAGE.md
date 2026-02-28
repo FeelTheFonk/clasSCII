@@ -1,6 +1,6 @@
 # Usage Guide
 
-Complete reference for classcii v0.5.3 — real-time audio-reactive ASCII/Unicode rendering engine.
+Complete reference for classcii v0.5.4 — real-time audio-reactive ASCII/Unicode rendering engine.
 
 ## Quick Start
 
@@ -152,7 +152,7 @@ All controls are available in real-time TUI mode. Press `?` to show the in-app h
 
 classcii maps audio features to visual parameters in real-time. Mappings are defined in TOML config files under `[[audio.mappings]]`.
 
-### 19 Audio Sources
+### 21 Audio Sources
 
 | Source | Range | Description |
 |--------|-------|-------------|
@@ -168,6 +168,7 @@ classcii maps audio features to visual parameters in real-time. Mappings are def
 | `spectral_centroid` | 0.0–1.0 | Frequency center of mass (timbral brightness) |
 | `spectral_flux` | 0.0–1.0 | Frame-to-frame spectral change (transient energy) |
 | `spectral_flatness` | 0.0–1.0 | Noise vs tonal content (1.0 = white noise) |
+| `spectral_rolloff` | 0.0–1.0 | Frequency below which 85% of spectral energy is concentrated |
 | `beat_intensity` | 0.0–1.0 | Onset/beat strength |
 | `onset` | 0 or 1 | Beat/transient detected (binary trigger) |
 | `beat_phase` | 0.0–1.0 | Position within current beat cycle |
@@ -175,6 +176,7 @@ classcii maps audio features to visual parameters in real-time. Mappings are def
 | `timbral_brightness` | 0.0–1.0 | MFCC-derived brightness (high-frequency timbre) |
 | `timbral_roughness` | 0.0–1.0 | MFCC-derived roughness (spectral irregularity) |
 | `onset_envelope` | 0.0–1.0 | Exponential decay envelope from last onset |
+| `zero_crossing_rate` | 0.0–1.0 | Normalized sign-change count (percussive/noise detection) |
 
 ### 14 Mapping Targets
 
@@ -209,7 +211,7 @@ classcii maps audio features to visual parameters in real-time. Mappings are def
 ```toml
 [[audio.mappings]]
 enabled = true
-source = "bass"                # Audio source (one of 19)
+source = "bass"                # Audio source (one of 21)
 target = "wave_amplitude"      # Visual target (one of 14)
 amount = 0.4                   # Multiplier
 offset = 0.0                   # Additive offset after multiplication
@@ -244,26 +246,34 @@ Pipeline order matters: Temporal Stability reduces flicker first, then effects l
 
 Press `K` to enter Creation Mode — an auto-modulation engine that drives all visual effects from audio features in real-time.
 
-### 5 Presets
+### 11 Presets
 
 | Preset | Character |
 |--------|-----------|
-| **Ambient** | Smooth breath-like oscillations driven by RMS and spectral centroid. Low intensity. |
-| **Percussive** | Beat-locked strobe, chromatic aberration, wave on hits. Onset-driven. |
-| **Psychedelic** | Fast color pulse from RMS, heavy chromatic from spectral flux, all effects active. |
-| **Cinematic** | Fade/glow dominant, subtle scan lines, controlled dynamics. Film-like. |
-| **Custom** | Auto-modulation disabled — full manual control over all effects. |
+| **Ambient** | Slow oscillations, low intensity, drift-based |
+| **Percussive** | Beat-locked strobe, wave, density pulse. Onset-driven. |
+| **Psychedelic** | Fast color pulse from RMS, heavy chromatic, all effects active. |
+| **Cinematic** | Fade/glow dominant, subtle scan lines, controlled dynamics. |
+| **Minimal** | Single dominant effect, clean and focused. |
+| **Photoreal** | Sharpest rendering, subtle audio response. |
+| **Abstract** | Non-figurative cross-mapped effects, density modulation. |
+| **Glitch** | Digital corruption, zalgo dominant, onset invert. |
+| **Lo-Fi** | Vintage degraded, constant scan lines. |
+| **Spectral** | Each frequency band drives a distinct effect. |
+| **Custom** | Auto-modulation disabled — full manual control. |
 
 ### Controls (while Creation Mode overlay is visible)
 
 | Key | Action |
 |-----|--------|
-| `Up` / `Down` | Select effect |
-| `Left` / `Right` | Adjust master intensity (auto mode) or selected effect value (manual mode) |
+| `Up` / `Down` | Select effect (Master at top, then 9 effects) |
+| `Left` / `Right` | Adjust selected element (always, regardless of auto/manual mode) |
 | `a` | Toggle auto/manual mode |
 | `p` | Cycle preset |
 | `Esc` | Hide overlay (modulation continues) |
 | `q` | Fully deactivate Creation Mode |
+
+Header shows `[AUTO]` (green) or `[MANUAL]` (red). Auto-modulated effects display `~` suffix.
 
 The sidebar shows `K●` when Creation Mode is active (modulating) and `K○` when inactive.
 
@@ -341,7 +351,7 @@ classcii --batch-folder ./media/ --audio track.mp3 --batch-out output.mp4 --fps 
 7. **Encoding**: Lossless x264 CRF 0 / YUV444p.
 8. **Muxing**: Final audio+video mux via FFmpeg.
 
-All 8 post-processing effects and all 19 audio source mappings are applied in the batch pipeline, achieving full parity with interactive mode.
+All 8 post-processing effects and all 21 audio source mappings are applied in the batch pipeline, achieving full parity with interactive mode. Macro-mutations on strong beats include mode cycling, invert flashes, charset rotations, density pulses, effect bursts, and color mode cycling. Clip duration is proportionally distributed across all media files in the folder.
 
 ---
 

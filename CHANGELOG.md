@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.4] — 2026-02-28
+
+### Fixed
+- **Creation Mode Left/Right UX**: Left/Right now always adjusts the selected element (Master or effect), regardless of auto/manual mode. Previously, Left/Right only adjusted master intensity in auto mode.
+- **Batch export video restart**: Videos no longer restart from 0.0 on EOF. EOF now advances to the next media file. Added proportional clip duration (`total_frames / file_count`) to ensure all media files get screen time.
+- **Performance — Glow**: Reduced neighbor lookups from 8 (including diagonals) to 4 cardinal directions. ~50% fewer reads, imperceptible visual difference.
+- **Performance — Color Pulse**: Skip HSV conversion on black cells `(0,0,0)`. Saves 30-60% of conversions on dark presets.
+- **Performance — Shape Matching**: Auto-disabled on grids >10k cells (300×100+) where it costs 40-60ms. Logs warning once.
+
+### Added
+- **6 new Creation Mode presets**: Minimal (single dominant effect), Photoreal (sharpest rendering), Abstract (cross-mapped non-figurative), Glitch (digital corruption), Lo-Fi (vintage degraded), Spectral (per-band effect mapping). Total: 11 presets.
+- **Master as index 0 in Creation Mode**: "Master" now appears as the first item in the effect list. Up/Down navigates Master (0) through Strobe Decay (9).
+- **[AUTO]/[MANUAL] indicator**: Clear mode label in Creation overlay header with color coding (green/red). Auto-modulated effects display `~` suffix.
+- **Frame budget tracking**: Performance warning `!` (yellow) displayed next to FPS when render time exceeds 1.5× frame budget for 10+ consecutive frames.
+- **Audio feature: spectral_rolloff** (#20): Frequency below which 85% of spectral energy is concentrated. O(n) single-pass cumsum.
+- **Audio feature: zero_crossing_rate** (#21): Normalized sign-change count on raw samples. Useful for percussive/noise detection.
+- **Onset envelope in AudioFeatures**: `onset_envelope` field now native in `AudioFeatures` struct (was computed locally in app/batch).
+- **Adaptive smoothing**: Per-frequency-band EMA multipliers — bass ×1.3 (slower), mid ×1.0, highs ×0.7 (faster), events ×0.5 (fastest).
+- **Batch macro-mutations**: 3 new mutations — density pulse (8%, 30 frames), effect burst (6%, 60 frames), color mode cycle (5%). Existing probabilities increased: mode 8%→12%, invert 6%→10%, charset 12%→15%.
+- **density_scale in Creation presets**: Percussive (bass-driven), Abstract (centroid-driven), Spectral (RMS-driven) with anti-thrashing (skip if delta < 0.15).
+- **ColorMode PartialEq**: `ColorMode` enum now derives `PartialEq` and `Eq`.
+- **21 audio sources** (was 19): Added `spectral_rolloff`, `zero_crossing_rate`.
+
 ## [0.5.3] — 2026-02-28
 
 ### Fixed

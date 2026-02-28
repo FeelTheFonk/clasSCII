@@ -147,6 +147,12 @@ pub struct App {
     pub creation_mode_active: bool,
     /// Scratch RenderConfig reused each frame (avoids per-frame Vec/String alloc).
     pub render_config_scratch: RenderConfig,
+    /// Performance warning flag (frame budget exceeded for 10+ consecutive frames).
+    pub perf_warning: bool,
+    /// Consecutive frames exceeding 1.5× frame budget.
+    perf_exceed_count: u8,
+    /// Whether shape-matching auto-disable warning has been logged.
+    shape_warn_logged: bool,
 }
 
 impl App {
@@ -221,6 +227,9 @@ impl App {
             creation_engine: CreationEngine::default(),
             creation_mode_active: false,
             render_config_scratch: RenderConfig::default(),
+            perf_warning: false,
+            perf_exceed_count: 0,
+            shape_warn_logged: false,
         })
     }
 
@@ -303,7 +312,22 @@ impl App {
             }
 
             // === Process source frame into ASCII grid ===
+            let render_start = Instant::now();
             if let Some(ref source_frame) = self.current_frame {
+                // B.4: Auto-disable shape matching on large grids (>10k cells)
+                if u32::from(self.grid.width) * u32::from(self.grid.height) > 10_000
+                    && render_config.shape_matching
+                {
+                    render_config.shape_matching = false;
+                    if !self.shape_warn_logged {
+                        log::warn!(
+                            "Shape matching auto-disabled: grid {}×{} > 10k cells",
+                            self.grid.width,
+                            self.grid.height
+                        );
+                        self.shape_warn_logged = true;
+                    }
+                }
                 // Resize source to grid dimensions
                 let _ = self
                     .resizer
@@ -421,6 +445,19 @@ impl App {
                 self.prev_grid.copy_from(&self.grid);
             }
 
+            // B.1: Frame budget tracking
+            let render_elapsed = render_start.elapsed();
+            let frame_budget = Duration::from_secs_f64(1.0 / f64::from(render_config.target_fps));
+            if render_elapsed > frame_budget + frame_budget / 2 {
+                self.perf_exceed_count = self.perf_exceed_count.saturating_add(1);
+                if self.perf_exceed_count >= 10 {
+                    self.perf_warning = true;
+                }
+            } else {
+                self.perf_exceed_count = self.perf_exceed_count.saturating_sub(1);
+                self.perf_warning = self.perf_exceed_count > 0 && self.perf_warning;
+            }
+
             // === Rendu terminal ===
             self.fps_counter.tick();
             let state = self.render_state();
@@ -470,6 +507,7 @@ impl App {
             };
 
             let creation_mode_active = self.creation_mode_active;
+            let perf_warning = self.perf_warning;
             terminal.draw(|frame| {
                 af_render::ui::draw(
                     frame,
@@ -486,6 +524,7 @@ impl App {
                     layout_audio_panel,
                     layout_creation.as_ref(),
                     creation_mode_active,
+                    perf_warning,
                 );
             })?;
             self.sidebar_dirty = false;
@@ -854,22 +893,10 @@ impl App {
                 }
             }
             KeyCode::Right => {
-                if self.creation_engine.auto_mode {
-                    // In auto mode: adjust master intensity
-                    self.creation_engine.master_intensity =
-                        (self.creation_engine.master_intensity + 0.1).min(2.0);
-                } else {
-                    // In manual mode: adjust selected effect directly
-                    self.adjust_creation_effect(0.1);
-                }
+                self.adjust_creation_effect(0.1);
             }
             KeyCode::Left => {
-                if self.creation_engine.auto_mode {
-                    self.creation_engine.master_intensity =
-                        (self.creation_engine.master_intensity - 0.1).max(0.0);
-                } else {
-                    self.adjust_creation_effect(-0.1);
-                }
+                self.adjust_creation_effect(-0.1);
             }
             KeyCode::Char('a') => {
                 self.creation_engine.auto_mode = !self.creation_engine.auto_mode;
@@ -887,23 +914,29 @@ impl App {
         }
     }
 
-    /// Adjust the selected effect value in creation manual mode.
+    /// Adjust the selected effect value in creation mode (index 0 = Master).
     fn adjust_creation_effect(&mut self, delta: f32) {
         let idx = self.creation_engine.selected_effect;
+        if idx == 0 {
+            // Master intensity — not in RenderConfig
+            self.creation_engine.master_intensity =
+                (self.creation_engine.master_intensity + delta).clamp(0.0, 2.0);
+            return;
+        }
         let max = self.creation_engine.effect_max(idx);
         self.toggle_config(|c| match idx {
-            0 => c.beat_flash_intensity = (c.beat_flash_intensity + delta).clamp(0.0, max),
-            1 => c.fade_decay = (c.fade_decay + delta).clamp(0.0, max),
-            2 => c.glow_intensity = (c.glow_intensity + delta).clamp(0.0, max),
-            3 => c.chromatic_offset = (c.chromatic_offset + delta * 5.0).clamp(0.0, max),
-            4 => c.wave_amplitude = (c.wave_amplitude + delta).clamp(0.0, max),
-            5 => c.color_pulse_speed = (c.color_pulse_speed + delta * 5.0).clamp(0.0, max),
-            6 => {
+            1 => c.beat_flash_intensity = (c.beat_flash_intensity + delta).clamp(0.0, max),
+            2 => c.fade_decay = (c.fade_decay + delta).clamp(0.0, max),
+            3 => c.glow_intensity = (c.glow_intensity + delta).clamp(0.0, max),
+            4 => c.chromatic_offset = (c.chromatic_offset + delta * 5.0).clamp(0.0, max),
+            5 => c.wave_amplitude = (c.wave_amplitude + delta).clamp(0.0, max),
+            6 => c.color_pulse_speed = (c.color_pulse_speed + delta * 5.0).clamp(0.0, max),
+            7 => {
                 let v = (f32::from(c.scanline_gap) + delta * 10.0).clamp(0.0, max) as u8;
                 c.scanline_gap = v;
             }
-            7 => c.zalgo_intensity = (c.zalgo_intensity + delta * 5.0).clamp(0.0, max),
-            8 => c.strobe_decay = (c.strobe_decay + delta).clamp(0.0, max),
+            8 => c.zalgo_intensity = (c.zalgo_intensity + delta * 5.0).clamp(0.0, max),
+            9 => c.strobe_decay = (c.strobe_decay + delta).clamp(0.0, max),
             _ => {}
         });
     }

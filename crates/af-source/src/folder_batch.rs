@@ -33,17 +33,29 @@ pub struct FolderBatchSource {
     video_frame: Option<Arc<FrameBuffer>>,
 
     target_fps: u32,
+    /// Frames read from the current clip (reset on media switch).
+    clip_frame_count: u32,
+    /// Maximum frames per clip (proportional to total_frames / file_count).
+    max_clip_frames: u32,
 }
 
 impl FolderBatchSource {
     /// Crée une nouvelle source par lots explorant `folder_path`.
     ///
+    /// `total_frames`: total frames in the audio timeline (for proportional clip duration).
+    ///
     /// # Errors
     /// Retourne une erreur si le dossier n'existe pas ou ne peut être lu.
-    pub fn new(folder_path: &Path, target_fps: u32) -> Result<Self> {
+    pub fn new(folder_path: &Path, target_fps: u32, total_frames: u32) -> Result<Self> {
         let mut files = Vec::new();
         Self::scan_dir(folder_path, &mut files)?;
         files.sort();
+
+        let max_clip_frames = if files.is_empty() {
+            u32::MAX
+        } else {
+            (total_frames / files.len() as u32).max(1)
+        };
 
         let mut source = Self {
             files,
@@ -56,6 +68,8 @@ impl FolderBatchSource {
             #[cfg(feature = "video")]
             video_frame: None,
             target_fps,
+            clip_frame_count: 0,
+            max_clip_frames,
         };
 
         source.load_current();
@@ -102,6 +116,7 @@ impl FolderBatchSource {
         if self.files.is_empty() {
             return;
         }
+        self.clip_frame_count = 0;
         let path = &self.files[self.current_idx];
 
         self.current_image = None;
@@ -157,7 +172,13 @@ impl FolderBatchSource {
 
 impl Source for FolderBatchSource {
     fn next_frame(&mut self) -> Option<Arc<FrameBuffer>> {
+        // Proportional clip duration: force advance when budget exhausted
+        if self.clip_frame_count >= self.max_clip_frames {
+            self.next_media();
+        }
+
         if let Some(img) = &self.current_image {
+            self.clip_frame_count += 1;
             return Some(Arc::clone(img));
         }
 
@@ -181,19 +202,18 @@ impl Source for FolderBatchSource {
                 });
 
                 match read_result {
-                    Ok(true) => Some(Arc::clone(frame_arc)),
+                    Ok(true) => {
+                        self.clip_frame_count += 1;
+                        Some(Arc::clone(frame_arc))
+                    }
                     Ok(false) => {
-                        let path = self.files[self.current_idx].clone();
+                        // EOF: advance to next media instead of restarting
                         if let Some(mut c) = self.video_child.take() {
                             let _ = c.kill();
                             let _ = c.wait();
                         }
-                        if let Some(new_child) =
-                            spawn_ffmpeg_pipe(&path, info.width, info.height, 0.0, self.target_fps)
-                        {
-                            self.video_child = Some(new_child);
-                        }
-                        Some(Arc::clone(frame_arc))
+                        self.next_media();
+                        self.next_frame()
                     }
                     Err(e) => {
                         log::warn!("FolderBatchSource: pipe read error: {e}");

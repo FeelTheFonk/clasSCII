@@ -341,6 +341,16 @@ pub struct AudioFeatures {
     /// Timbral roughness (MFCC2 normalized) [0.0, 1.0].
     pub timbral_roughness: f32,
 
+    // === Additional spectral features ===
+    /// Spectral rolloff: frequency below which 85% of energy is concentrated [0.0, 1.0].
+    pub spectral_rolloff: f32,
+    /// Zero crossing rate: normalized sign-change count [0.0, 1.0].
+    pub zero_crossing_rate: f32,
+
+    // === Envelope ===
+    /// Onset envelope (continuous, decays via strobe_decay) [0.0, 1.0].
+    pub onset_envelope: f32,
+
     // === Spectre compressé pour visualisation ===
     /// 32 bandes log-fréquence, normalisées [0.0, 1.0].
     pub spectrum_bands: [f32; 32],
