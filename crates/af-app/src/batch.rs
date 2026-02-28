@@ -270,7 +270,11 @@ pub fn run_batch_export(
                     // To keep it 100% allocation free and simple for headless, we skip fade decay in batch
                     // or we would need a persistent prev_grid. Let's just do beat flash.
                 }
-                af_render::effects::apply_beat_flash(&mut grid, &current_features);
+                af_render::effects::apply_strobe(
+                    &mut grid,
+                    if current_features.onset { 1.0 } else { 0.0 },
+                    frame_config.beat_flash_intensity,
+                );
 
                 // Note: Glow is skipped in headless unless we rasterize the glow.
                 // The current rasterizer just paints the characters.

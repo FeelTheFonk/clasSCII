@@ -64,6 +64,9 @@ pub fn extract_features(samples: &[f32], spectrum: &[f32], sample_rate: u32) -> 
         fill_spectrum_bands(spectrum, bin_hz, &mut features.spectrum_bands);
     }
 
+    // MFCC fields are computed externally by MelFilterbank (stateful)
+    // and injected after extract_features returns.
+
     features
 }
 

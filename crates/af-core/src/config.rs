@@ -23,8 +23,8 @@ pub struct RenderConfig {
     pub charset: String,
     /// Index du charset actif parmi les 5 presets built-in.
     pub charset_index: usize,
-    /// Activer le tramage optique de luminance (Bayer 8x8 Dithering).
-    pub dither_enabled: bool,
+    /// Dithering mode.
+    pub dither_mode: DitherMode,
     /// Inverser la luminance (pour fond clair).
     pub invert: bool,
     /// Activer la couleur truecolor.
@@ -69,6 +69,22 @@ pub struct RenderConfig {
     pub glow_intensity: f32,
     /// Zalgo combinatory string intensity. Dynamically driven by audio onset.
     pub zalgo_intensity: f32,
+    /// Beat flash / strobe intensity [0.0, 2.0]. 0.0 = disabled.
+    pub beat_flash_intensity: f32,
+    /// Chromatic aberration offset [0.0, 5.0]. 0.0 = disabled.
+    pub chromatic_offset: f32,
+    /// Wave distortion amplitude [0.0, 1.0]. 0.0 = disabled.
+    pub wave_amplitude: f32,
+    /// Wave distortion speed [0.5, 10.0].
+    pub wave_speed: f32,
+    /// Color pulse hue rotation speed [0.0, 5.0]. 0.0 = disabled.
+    pub color_pulse_speed: f32,
+    /// Scan line gap (0 = off, 2-8).
+    pub scanline_gap: u8,
+    /// Strobe envelope decay [0.5, 0.99].
+    pub strobe_decay: f32,
+    /// Temporal stability (anti-flicker) [0.0, 1.0]. 0.0 = disabled.
+    pub temporal_stability: f32,
 
     // === Performance ===
     /// FPS cible. 30 ou 60.
@@ -98,6 +114,9 @@ pub const AUDIO_SOURCES: &[&str] = &[
     "onset",
     "beat_phase",
     "bpm",
+    "timbral_brightness",
+    "timbral_roughness",
+    "onset_envelope",
 ];
 
 pub const AUDIO_TARGETS: &[&str] = &[
@@ -109,6 +128,12 @@ pub const AUDIO_TARGETS: &[&str] = &[
     "density_scale",
     "invert",
     "zalgo_intensity",
+    "beat_flash_intensity",
+    "chromatic_offset",
+    "wave_amplitude",
+    "color_pulse_speed",
+    "fade_decay",
+    "glow_intensity",
 ];
 
 #[must_use]
@@ -116,12 +141,26 @@ pub fn default_true() -> bool {
     true
 }
 
+/// Non-linear mapping curve for audio-to-visual shaping.
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+pub enum MappingCurve {
+    /// Identity: y = x.
+    #[default]
+    Linear,
+    /// Exponential: y = x² (suppresses low values, amplifies peaks).
+    Exponential,
+    /// Gate: y = 0 if x < 0.3, else (x-0.3)/0.7.
+    Threshold,
+    /// Smoothstep: y = 3x² - 2x³.
+    Smooth,
+}
+
 /// A single audio-to-visual parameter mapping.
 ///
 /// # Example
 /// ```
 /// use af_core::config::AudioMapping;
-/// let m = AudioMapping { enabled: true, source: "bass".into(), target: "contrast".into(), amount: 0.5, offset: 0.0 };
+/// let m = AudioMapping { enabled: true, source: "bass".into(), target: "contrast".into(), amount: 0.5, offset: 0.0, curve: Default::default(), smoothing: None };
 /// assert_eq!(m.source, "bass");
 /// ```
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -137,6 +176,12 @@ pub struct AudioMapping {
     pub amount: f32,
     /// Offset ajouté après multiplication.
     pub offset: f32,
+    /// Response curve applied before amount/sensitivity.
+    #[serde(default)]
+    pub curve: MappingCurve,
+    /// Per-mapping smoothing override. None = use global audio_smoothing.
+    #[serde(default)]
+    pub smoothing: Option<f32>,
 }
 
 /// Render mode enumeration.
@@ -181,6 +226,21 @@ pub enum ColorMode {
     HsvBright,
     /// Quantifié sur palette réduite.
     Quantized,
+    /// Oklab avec L forcé à 1.0 (perceptuellement uniforme).
+    Oklab,
+}
+
+/// Dithering mode for luminance quantization.
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq)]
+pub enum DitherMode {
+    /// Bayer 8×8 ordered dithering (default).
+    #[default]
+    Bayer8x8,
+    /// Blue noise 16×16 dithering (perceptually superior).
+    #[serde(alias = "BlueNoise64")]
+    BlueNoise16,
+    /// No dithering.
+    None,
 }
 
 /// Background rendering style.
@@ -208,7 +268,7 @@ impl Default for RenderConfig {
             render_mode: RenderMode::Ascii,
             charset: crate::charset::CHARSET_FULL.to_string(),
             charset_index: 0,
-            dither_enabled: true,
+            dither_mode: DitherMode::Bayer8x8,
             invert: false,
             color_enabled: true,
             edge_threshold: 0.3,
@@ -228,6 +288,8 @@ impl Default for RenderConfig {
                     target: "edge_threshold".into(),
                     amount: 0.3,
                     offset: 0.0,
+                    curve: MappingCurve::Linear,
+                    smoothing: None,
                 },
                 AudioMapping {
                     enabled: true,
@@ -235,6 +297,8 @@ impl Default for RenderConfig {
                     target: "contrast".into(),
                     amount: 0.5,
                     offset: 0.0,
+                    curve: MappingCurve::Linear,
+                    smoothing: None,
                 },
                 AudioMapping {
                     enabled: true,
@@ -242,6 +306,8 @@ impl Default for RenderConfig {
                     target: "invert".into(),
                     amount: 1.0,
                     offset: 0.0,
+                    curve: MappingCurve::Linear,
+                    smoothing: None,
                 },
                 AudioMapping {
                     enabled: true,
@@ -249,6 +315,8 @@ impl Default for RenderConfig {
                     target: "brightness".into(),
                     amount: 0.2,
                     offset: 0.0,
+                    curve: MappingCurve::Linear,
+                    smoothing: None,
                 },
             ],
             audio_smoothing: 0.7,
@@ -256,6 +324,14 @@ impl Default for RenderConfig {
             fade_decay: 0.3,
             glow_intensity: 0.5,
             zalgo_intensity: 0.0,
+            beat_flash_intensity: 0.8,
+            chromatic_offset: 0.0,
+            wave_amplitude: 0.0,
+            wave_speed: 2.0,
+            color_pulse_speed: 0.0,
+            scanline_gap: 0,
+            strobe_decay: 0.85,
+            temporal_stability: 0.0,
             target_fps: 30,
             fullscreen: false,
             show_spectrum: true,
@@ -277,6 +353,7 @@ struct RenderSection {
     charset: Option<String>,
     charset_index: Option<usize>,
     dither_enabled: Option<bool>,
+    dither_mode: Option<DitherMode>,
     invert: Option<bool>,
     color_enabled: Option<bool>,
     edge_threshold: Option<f32>,
@@ -292,6 +369,14 @@ struct RenderSection {
     fade_decay: Option<f32>,
     glow_intensity: Option<f32>,
     zalgo_intensity: Option<f32>,
+    beat_flash_intensity: Option<f32>,
+    chromatic_offset: Option<f32>,
+    wave_amplitude: Option<f32>,
+    wave_speed: Option<f32>,
+    color_pulse_speed: Option<f32>,
+    scanline_gap: Option<u8>,
+    strobe_decay: Option<f32>,
+    temporal_stability: Option<f32>,
     target_fps: Option<u32>,
     fullscreen: Option<bool>,
     show_spectrum: Option<bool>,
@@ -316,6 +401,7 @@ struct AudioSection {
 /// use std::path::Path;
 /// let config = load_config(Path::new("config/default.toml")).unwrap();
 /// ```
+#[allow(clippy::too_many_lines)]
 pub fn load_config(path: &Path) -> Result<RenderConfig> {
     let content = std::fs::read_to_string(path)
         .with_context(|| format!("Impossible de lire {}", path.display()))?;
@@ -335,8 +421,14 @@ pub fn load_config(path: &Path) -> Result<RenderConfig> {
     if let Some(v) = r.charset_index {
         config.charset_index = v;
     }
-    if let Some(v) = r.dither_enabled {
-        config.dither_enabled = v;
+    if let Some(v) = r.dither_mode {
+        config.dither_mode = v;
+    } else if let Some(v) = r.dither_enabled {
+        config.dither_mode = if v {
+            DitherMode::Bayer8x8
+        } else {
+            DitherMode::None
+        };
     }
     if let Some(v) = r.invert {
         config.invert = v;
@@ -382,6 +474,30 @@ pub fn load_config(path: &Path) -> Result<RenderConfig> {
     }
     if let Some(v) = r.zalgo_intensity {
         config.zalgo_intensity = v;
+    }
+    if let Some(v) = r.beat_flash_intensity {
+        config.beat_flash_intensity = v;
+    }
+    if let Some(v) = r.chromatic_offset {
+        config.chromatic_offset = v;
+    }
+    if let Some(v) = r.wave_amplitude {
+        config.wave_amplitude = v;
+    }
+    if let Some(v) = r.wave_speed {
+        config.wave_speed = v;
+    }
+    if let Some(v) = r.color_pulse_speed {
+        config.color_pulse_speed = v;
+    }
+    if let Some(v) = r.scanline_gap {
+        config.scanline_gap = v;
+    }
+    if let Some(v) = r.strobe_decay {
+        config.strobe_decay = v;
+    }
+    if let Some(v) = r.temporal_stability {
+        config.temporal_stability = v;
     }
     if let Some(v) = r.target_fps {
         config.target_fps = v;

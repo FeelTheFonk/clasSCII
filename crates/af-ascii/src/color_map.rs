@@ -1,4 +1,4 @@
-use af_core::color::apply_hsv_bright;
+use af_core::color::{apply_hsv_bright, apply_oklab_bright};
 use af_core::config::ColorMode;
 
 /// Map a pixel color according to the selected color mode.
@@ -16,6 +16,7 @@ pub fn map_color(r: u8, g: u8, b: u8, mode: &ColorMode, saturation: f32) -> (u8,
         ColorMode::Direct => (r, g, b),
         ColorMode::HsvBright => apply_hsv_bright(r, g, b, saturation),
         ColorMode::Quantized => quantize(r, g, b),
+        ColorMode::Oklab => apply_oklab_bright(r, g, b, saturation),
     }
 }
 

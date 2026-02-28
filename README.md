@@ -1,7 +1,7 @@
 # classcii
 
  Real-time audio-reactive ASCII/Unicode rendering engine for terminal-based TUI applications — with an offline generative batch export pipeline to lossless MP4.
-This engine pushes the limits of typography by integrating advanced topologies (Braille, Quadrants, Sextants, Octants), Bayer 8x8 Dithering, and audio-reactive Zalgo glitches, all while guaranteeing Zero-Allocation in the hot loops and 100% lock-free Safe Rust memory management.
+This engine pushes the limits of typography by integrating advanced topologies (Braille, Quadrants, Sextants, Octants), Blue Noise and Bayer dithering, perceptual Oklab color space, MFCC timbral analysis, 8 real-time post-processing effects, a Creation Mode with auto-modulation presets, and audio-reactive Zalgo glitches — all while guaranteeing zero-allocation in the hot loops and 100% lock-free Safe Rust memory management.
 
 ## Requirements
 
@@ -128,12 +128,20 @@ classcii --batch-folder ./media/ --preset 02_matrix
 | `{` / `}` | Adjust brightness |
 | `-` / `+` | Adjust saturation |
 | `f` / `F` | Adjust fade decay |
-| `g` / `G` | Adjust glow amplitude |
+| `g` / `G` | Adjust glow intensity |
+| `t` / `T` | Adjust strobe intensity |
+| `r` / `R` | Adjust chromatic aberration |
+| `w` / `W` | Adjust wave distortion |
+| `h` / `H` | Adjust color pulse speed |
+| `l` / `L` | Adjust scan line gap |
+| `v` | Toggle spectrum display |
+| `F2` | Cycle dither mode (Bayer8x8 / BlueNoise16 / Off) |
 | `↑` / `↓` | Adjust general audio sensitivity |
 | `←` / `→` | Seek temporal stream |
 | `Space` | Pause / Resume engine |
 | `C` | Open Custom Charset Editor |
 | `A` | Open Audio Reactivity Mixer Panel |
+| `K` | Enter Creation Mode (auto-modulation) |
 | `o` | Open visual file picker (image / video) |
 | `O` | Open audio file picker |
 | `p` / `P` | Cycle preset |
@@ -150,16 +158,52 @@ Audio-reactive behavior is configured via `audio_mappings` in TOML config files:
 source = "bass"            # Audio feature: rms, peak, sub_bass, bass, low_mid, mid,
                            # high_mid, presence, brilliance, spectral_centroid,
                            # spectral_flux, spectral_flatness, onset, beat_intensity,
-                           # beat_phase, bpm
+                           # beat_phase, bpm, timbral_brightness, timbral_roughness,
+                           # onset_envelope
 target = "zalgo_intensity" # Visual target: edge_threshold, edge_mix, contrast,
                            # brightness, saturation, density_scale, invert,
                            # zalgo_intensity
 amount = 1.0               # Multiplier
 offset = 0.0               # Additive offset after multiplication
+curve = "Linear"           # Response curve: Linear, Exponential, Threshold, Smooth
 enabled = true
 ```
 
-Multiple mappings can be defined simultaneously. In batch export mode, mappings are applied per-frame from the pre-analyzed `FeatureTimeline`.
+Multiple mappings can be defined simultaneously. MFCC-derived timbral features (`timbral_brightness`, `timbral_roughness`) enable instrument-aware reactivity via 26 Mel-spaced triangular filters (300-8000 Hz) with DCT-II compression to 5 coefficients. Four response curves (Linear, Exponential, Threshold, Smooth) and per-mapping smoothing override the global EMA smoothing. In batch export mode, mappings are applied per-frame from the pre-analyzed `FeatureTimeline`.
+
+## Post-Processing Effects
+
+8 real-time composable effects applied in a fixed pipeline order:
+
+| Effect | Key | Description |
+|--------|-----|-------------|
+| Temporal Stability | (auto) | Anti-flicker via char density heuristic |
+| Wave Distortion | `w/W` | Sinusoidal row shift |
+| Chromatic Aberration | `r/R` | R/B channel offset |
+| Color Pulse | `h/H` | HSV hue rotation |
+| Fade Trails | `f/F` | Temporal persistence |
+| Strobe | `t/T` | Beat-synced continuous envelope flash |
+| Scan Lines | `l/L` | Darken every Nth row |
+| Glow | `g/G` | Brightness bloom |
+
+## Creation Mode
+
+Press `K` to enter Creation Mode, an auto-modulation engine that drives all visual effects from audio features. Four presets adapt to the audio content:
+
+| Preset | Character |
+|--------|-----------|
+| Ambient | Slow oscillations, low intensity, drift-based |
+| Percussive | Beat-locked, aggressive strobe and wave |
+| Psychedelic | High chromatic aberration, fast color pulse |
+| Cinematic | Smooth fade, wide glow, controlled dynamics |
+
+Navigation: `Up/Down` select effect, `Left/Right` adjust, `a` toggle auto-mode, `p` cycle preset, `Esc` exit.
+
+## R&D: Perceptual Color and Dithering
+
+- **Oklab color space**: Perceptually uniform brightness adjustments via `rgb_to_oklab` / `oklab_to_rgb`. Selectable via `m` key (Direct / HSV / Oklab / Quantized).
+- **Blue Noise 16x16 dithering**: Perceptually superior to Bayer ordered dithering. Cycle with `F2` (Bayer8x8 / BlueNoise16 / Off).
+- **Temporal Stability**: Anti-flicker heuristic based on character density distance, preventing rapid ASCII character oscillation.
 
 ## Presets
 
@@ -188,13 +232,14 @@ Configurations and presets are managed via TOML files. Audio mappings and charse
 
 - Native O(1) mathematical mapping for UI bounds and typographical translation (Sextant/Octant LUTs processed at compile-time).
 - Hot loops are absolutely memory-stable and do not allocate memory (R1).
-- Zéro `unsafe` blocks — strict immunity to segfaults enforced by `#![deny(unsafe_code)]` coverage (R2).
+- Zero `unsafe` blocks — strict immunity to segfaults enforced by `#![deny(unsafe_code)]` workspace-wide (R2).
 - Zero panicking unwraps — `?` operator and graceful fallback implemented across all layers (R3).
 - Zero unnecessary copies — driven by `Arc<FrameBuffer>`, `arc-swap`, and lock-free `triple_buffer` mechanics (R4).
-- Compile strictness perfection: `cargo clippy --workspace --features video --all-targets -- -D warnings` passes completely clean with 0 warnings globally (R7).
-- 100% Doctor and Unit Tests operational pass rating.
-- `cargo fmt --check --all` passes clean.
+- Compile strictness: `cargo clippy --workspace --features video -- -D warnings` passes 0 warnings with pedantic lints enabled.
+- 65 tests (unit + doctests) pass. `cargo fmt --check --all` clean.
+- All division operations guarded against zero. All user inputs clamped to valid ranges.
+- Release profile: LTO=fat, codegen-units=1, strip=symbols, panic=abort.
 
 ## License
 
-MIT
+MIT OR Apache-2.0

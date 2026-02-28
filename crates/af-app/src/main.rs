@@ -9,6 +9,7 @@ use clap::Parser;
 pub mod app;
 pub mod batch;
 pub mod cli;
+pub mod creation;
 pub mod generative;
 pub mod hotreload;
 pub mod pipeline;

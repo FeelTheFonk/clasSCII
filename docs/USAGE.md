@@ -6,7 +6,7 @@
 
 ```bash
 git clone <repo>
-cd asciiforge
+cd classcii
 cargo build --release --features video
 ```
 

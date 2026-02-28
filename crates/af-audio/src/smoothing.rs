@@ -58,6 +58,10 @@ impl FeatureSmoother {
             self.ar(current.spectral_flatness, self.prev.spectral_flatness);
         smoothed.bpm = self.ar(current.bpm, self.prev.bpm);
         smoothed.beat_intensity = self.ar(current.beat_intensity, self.prev.beat_intensity);
+        smoothed.timbral_brightness =
+            self.ar(current.timbral_brightness, self.prev.timbral_brightness);
+        smoothed.timbral_roughness =
+            self.ar(current.timbral_roughness, self.prev.timbral_roughness);
 
         // Events: no smoothing
         smoothed.onset = current.onset;

@@ -44,12 +44,13 @@ pub fn process_luminance(
             let adjusted = apply_contrast_brightness(lum, config.contrast, config.brightness);
 
             let mut final_lum = adjusted;
-            if config.dither_enabled {
-                final_lum = crate::dither::apply_bayer_8x8(
+            if config.dither_mode != af_core::config::DitherMode::None {
+                final_lum = crate::dither::apply_dither(
                     final_lum,
                     u32::from(cx),
                     u32::from(cy),
                     config.charset.chars().count() as f32,
+                    &config.dither_mode,
                 );
             }
 

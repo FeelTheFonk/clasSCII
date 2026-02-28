@@ -1,7 +1,7 @@
 #[derive(Clone, Debug, Default)]
 pub struct AudioPanelState {
     pub selected_row: usize, // 0=sensitivity, 1=smoothing, 2..=mapping[i-2]
-    pub selected_col: usize, // 0=enabled, 1=source, 2=target, 3=amount, 4=offset
+    pub selected_col: usize, // 0=enabled, 1=source, 2=target, 3=amount, 4=offset, 5=curve
     pub total_rows: usize,   // 2 + mappings.len()
 }
 

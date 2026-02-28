@@ -8,6 +8,20 @@ use ratatui::widgets::{Block, Borders, Paragraph, Sparkline};
 
 use crate::canvas;
 use crate::fps::FpsCounter;
+
+/// Data bundle for the creation mode overlay.
+pub struct CreationOverlayData<'a> {
+    /// Auto-modulation active.
+    pub auto_mode: bool,
+    /// Master intensity [0.0, 2.0].
+    pub master_intensity: f32,
+    /// Active preset name.
+    pub preset_name: &'a str,
+    /// Selected effect index.
+    pub selected_effect: usize,
+    /// Effect names and current values.
+    pub effects: Vec<(&'a str, f32, f32)>, // (name, value, max)
+}
 use crate::widgets::AudioPanelState;
 
 /// Application state enum (mirrored for rendering decisions).
@@ -31,6 +45,8 @@ pub enum RenderState {
     AudioPanel,
     /// Invite choix Fichier/Dossier.
     FileOrFolderPrompt,
+    /// Mode création interactif.
+    CreationMode,
     /// Quitting (should not reach draw).
     Quitting,
 }
@@ -50,6 +66,7 @@ pub fn draw(
     state: &RenderState,
     layout_charset_edit: Option<(&str, usize)>,
     layout_audio_panel: Option<(&AudioPanelState, &RenderConfig)>,
+    layout_creation: Option<&CreationOverlayData<'_>>,
 ) {
     let area = frame.area();
 
@@ -105,6 +122,8 @@ pub fn draw(
         draw_charset_edit_overlay(frame, area, buf, cursor);
     } else if let Some((panel_state, rcfg)) = layout_audio_panel {
         draw_audio_panel_overlay(frame, area, rcfg, panel_state, audio);
+    } else if let Some(creation) = layout_creation {
+        draw_creation_overlay(frame, area, creation, audio);
     }
 }
 
@@ -208,6 +227,7 @@ fn draw_sidebar(
         ColorMode::Direct => "Direct",
         ColorMode::HsvBright => "HSV",
         ColorMode::Quantized => "Quant",
+        ColorMode::Oklab => "Oklab",
     };
 
     let bg_str = match config.bg_style {
@@ -223,6 +243,7 @@ fn draw_sidebar(
         RenderState::CharsetEdit => "C EDIT",
         RenderState::AudioPanel => "A MIX",
         RenderState::FileOrFolderPrompt => "? SELECT",
+        RenderState::CreationMode => "K CREATE",
         RenderState::Quitting => "⏹ QUIT",
     };
 
@@ -285,8 +306,35 @@ fn draw_sidebar(
         ),
         kv("[a]", "Aspc", format!("{:.1}", config.aspect_ratio)),
         kv("[b]", "BG", bg_str.to_string()),
+        kv(
+            "[F2]",
+            "Dthr",
+            match config.dither_mode {
+                af_core::config::DitherMode::Bayer8x8 => "Bayer8",
+                af_core::config::DitherMode::BlueNoise16 => "BNoise",
+                af_core::config::DitherMode::None => "OFF",
+            }
+            .to_string(),
+        ),
         kv("[f/F]", "Fade", format!("{:.1}", config.fade_decay)),
         kv("[g/G]", "Glow", format!("{:.1}", config.glow_intensity)),
+        kv(
+            "[t/T]",
+            "Strob",
+            format!("{:.1}", config.beat_flash_intensity),
+        ),
+        kv("[r/R]", "Chrom", format!("{:.1}", config.chromatic_offset)),
+        kv("[w/W]", "Wave", format!("{:.2}", config.wave_amplitude)),
+        kv("[h/H]", "Pulse", format!("{:.1}", config.color_pulse_speed)),
+        kv(
+            "[l/L]",
+            "Scan",
+            if config.scanline_gap == 0 {
+                "OFF".to_string()
+            } else {
+                format!("{}", config.scanline_gap)
+            },
+        ),
         Line::from(""),
         Line::from(Span::styled(
             "─ Audio ───",
@@ -360,7 +408,7 @@ fn draw_help_overlay(frame: &mut Frame, area: Rect) {
         Line::from(" q/Esc    Quit"),
         Line::from(" Space    Play/Pause"),
         Line::from(" Tab      Cycle mode"),
-        Line::from(" 1-5      Select charset"),
+        Line::from(" 1-0      Select charset"),
         Line::from(" d/D      Density ±"),
         Line::from(" i        Toggle invert"),
         Line::from(" c        Toggle color"),
@@ -371,6 +419,11 @@ fn draw_help_overlay(frame: &mut Frame, area: Rect) {
         Line::from(" -/+      Saturation ±"),
         Line::from(" f/F      Fade decay ±"),
         Line::from(" g/G      Glow intens ±"),
+        Line::from(" t/T      Strobe intens ±"),
+        Line::from(" r/R      Chromatic ±"),
+        Line::from(" w/W      Wave amplit ±"),
+        Line::from(" h/H      Color pulse ±"),
+        Line::from(" l/L      Scan lines"),
         Line::from(" a        Cycle aspect"),
         Line::from(" e/E      Edge toggl/mix"),
         Line::from(" s        Toggle shapes"),
@@ -382,6 +435,8 @@ fn draw_help_overlay(frame: &mut Frame, area: Rect) {
         Line::from(" O        Open audio"),
         Line::from(" C        Edit charset"),
         Line::from(" A        Audio mixer"),
+        Line::from(" K        Creation mode"),
+        Line::from(" F2       Cycle dither mode"),
         Line::from(" x        Toggle fullscreen"),
         Line::from(" ?        Toggle help"),
         Line::from(""),
@@ -553,7 +608,7 @@ fn draw_audio_panel_overlay(
         Style::default().fg(Color::DarkGray),
     )));
     lines.push(Line::from(Span::styled(
-        " #  ON  Source         Target         Amt   Off",
+        " #  ON  Source         Target         Amt   Off   Crv",
         Style::default().fg(Color::Yellow),
     )));
 
@@ -583,7 +638,17 @@ fn draw_audio_panel_overlay(
             format!("{:<5.2} ", m.amount),
             cell_style(r, 3),
         ));
-        spans.push(Span::styled(format!("{:<5.2}", m.offset), cell_style(r, 4)));
+        spans.push(Span::styled(
+            format!("{:<5.2} ", m.offset),
+            cell_style(r, 4),
+        ));
+        let curve_str = match &m.curve {
+            af_core::config::MappingCurve::Linear => "Lin",
+            af_core::config::MappingCurve::Exponential => "Exp",
+            af_core::config::MappingCurve::Threshold => "Thr",
+            af_core::config::MappingCurve::Smooth => "Smo",
+        };
+        spans.push(Span::styled(format!("{curve_str:<3}"), cell_style(r, 5)));
 
         lines.push(Line::from(spans));
     }
@@ -614,7 +679,7 @@ fn draw_audio_panel_overlay(
         Style::default().fg(Color::DarkGray),
     )));
 
-    let overlay_width = 54u16;
+    let overlay_width = 60u16;
     let overlay_height = lines.len() as u16 + 2;
     let x = area.x + area.width.saturating_sub(overlay_width) / 2;
     let y = area.y + area.height.saturating_sub(overlay_height) / 2;
@@ -624,6 +689,146 @@ fn draw_audio_panel_overlay(
         Block::default()
             .borders(Borders::ALL)
             .title(" Audio Reactivity Mixer ")
+            .style(Style::default().bg(Color::Black).fg(Color::White)),
+    );
+
+    frame.render_widget(widget, overlay_area);
+}
+
+/// Draw the creation mode overlay with effect list and audio meters.
+#[allow(clippy::too_many_lines)]
+fn draw_creation_overlay(
+    frame: &mut Frame,
+    area: Rect,
+    creation: &CreationOverlayData<'_>,
+    audio: Option<&AudioFeatures>,
+) {
+    let mut lines: Vec<Line<'_>> = Vec::with_capacity(24);
+
+    // Header
+    let auto_str = if creation.auto_mode { "ON" } else { "OFF" };
+    let auto_color = if creation.auto_mode {
+        Color::Green
+    } else {
+        Color::Red
+    };
+    let bar_len = (creation.master_intensity / 2.0 * 10.0) as usize;
+    let master_bar: String =
+        "\u{2588}".repeat(bar_len) + &"\u{2591}".repeat(10_usize.saturating_sub(bar_len));
+
+    lines.push(Line::from(vec![
+        Span::styled("  [a] AUTO: ", Style::default().fg(Color::Gray)),
+        Span::styled(auto_str, Style::default().fg(auto_color)),
+        Span::styled("    Master: ", Style::default().fg(Color::Gray)),
+        Span::styled(master_bar, Style::default().fg(Color::Cyan)),
+        Span::styled(
+            format!(" [{:.1}]", creation.master_intensity),
+            Style::default().fg(Color::White),
+        ),
+    ]));
+
+    lines.push(Line::from(vec![
+        Span::styled("  [p] Preset: ", Style::default().fg(Color::Gray)),
+        Span::styled(creation.preset_name, Style::default().fg(Color::Yellow)),
+    ]));
+
+    lines.push(Line::from(""));
+    lines.push(Line::from(Span::styled(
+        "  \u{2500}\u{2500} Effects \u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}",
+        Style::default().fg(Color::DarkGray),
+    )));
+
+    // Effects list
+    for (i, (name, value, max)) in creation.effects.iter().enumerate() {
+        let selected = i == creation.selected_effect;
+        let prefix = if selected { " \u{25b8} " } else { "   " };
+        let bar_len = if *max > 0.0 {
+            (value / max * 7.0) as usize
+        } else {
+            0
+        };
+        let bar: String =
+            "\u{2588}".repeat(bar_len) + &"\u{2591}".repeat(7_usize.saturating_sub(bar_len));
+        let name_color = if selected { Color::White } else { Color::Gray };
+
+        lines.push(Line::from(vec![
+            Span::styled(prefix, Style::default().fg(Color::Cyan)),
+            Span::styled(format!("{name:<12}"), Style::default().fg(name_color)),
+            Span::styled(bar, Style::default().fg(Color::Green)),
+            Span::styled(format!("  [{value:.1}]"), Style::default().fg(Color::White)),
+        ]));
+    }
+
+    // Audio meters
+    lines.push(Line::from(""));
+    lines.push(Line::from(Span::styled(
+        "  \u{2500}\u{2500} Audio Live \u{2500}\u{2500}",
+        Style::default().fg(Color::DarkGray),
+    )));
+
+    if let Some(af) = audio {
+        let rms_bar = "\u{2588}".repeat((af.rms * 4.0) as usize);
+        let bass_bar = "\u{2588}".repeat((af.bass * 4.0) as usize);
+        let mid_bar = "\u{2588}".repeat((af.mid * 4.0) as usize);
+        let high_bar = "\u{2588}".repeat((af.brilliance * 4.0) as usize);
+        lines.push(Line::from(vec![
+            Span::styled("  RMS ", Style::default().fg(Color::Gray)),
+            Span::styled(rms_bar, Style::default().fg(Color::Green)),
+            Span::styled("  Bass ", Style::default().fg(Color::Gray)),
+            Span::styled(bass_bar, Style::default().fg(Color::Red)),
+            Span::styled("  Mid ", Style::default().fg(Color::Gray)),
+            Span::styled(mid_bar, Style::default().fg(Color::Yellow)),
+            Span::styled("  Hi ", Style::default().fg(Color::Gray)),
+            Span::styled(high_bar, Style::default().fg(Color::Cyan)),
+        ]));
+
+        let bpm_str = if af.bpm > 0.0 {
+            format!("{:.0}", af.bpm)
+        } else {
+            "--".into()
+        };
+        let beat_str = if af.onset {
+            "\u{25cf} BEAT"
+        } else {
+            "\u{25cb}"
+        };
+        let beat_color = if af.onset {
+            Color::Red
+        } else {
+            Color::DarkGray
+        };
+        lines.push(Line::from(vec![
+            Span::styled(
+                format!("  BPM: {bpm_str}"),
+                Style::default().fg(Color::White),
+            ),
+            Span::styled("  ", Style::default()),
+            Span::styled(beat_str, Style::default().fg(beat_color)),
+        ]));
+    } else {
+        lines.push(Line::from(Span::styled(
+            "  (no audio)",
+            Style::default().fg(Color::DarkGray),
+        )));
+    }
+
+    // Footer
+    lines.push(Line::from(""));
+    lines.push(Line::from(Span::styled(
+        "  [\u{2191}\u{2193}] Select  [\u{2190}\u{2192}] Master  [a] Auto  [p] Preset  [Esc] Close",
+        Style::default().fg(Color::DarkGray),
+    )));
+
+    let overlay_width = 52u16;
+    let overlay_height = lines.len() as u16 + 2;
+    let x = area.x + area.width.saturating_sub(overlay_width) / 2;
+    let y = area.y + area.height.saturating_sub(overlay_height) / 2;
+    let overlay_area = Rect::new(x, y, overlay_width, overlay_height);
+
+    let widget = Paragraph::new(lines).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .title(" CREATION MODE ")
             .style(Style::default().bg(Color::Black).fg(Color::White)),
     );
 

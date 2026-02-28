@@ -118,12 +118,13 @@ impl Compositor {
                             (val - 128.0) * config.contrast + 128.0 + config.brightness * 255.0;
 
                         let mut final_lum = adjusted.clamp(0.0, 255.0) as u8;
-                        if config.dither_enabled && !use_shape {
-                            final_lum = crate::dither::apply_bayer_8x8(
+                        if config.dither_mode != af_core::config::DitherMode::None && !use_shape {
+                            final_lum = crate::dither::apply_dither(
                                 final_lum,
                                 cx as u32,
                                 cy as u32,
                                 charset_len,
+                                &config.dither_mode,
                             );
                         }
 

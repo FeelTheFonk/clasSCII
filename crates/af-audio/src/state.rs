@@ -21,6 +21,7 @@ use crate::capture::AudioCapture;
 use crate::decode;
 use crate::features;
 use crate::fft::FftPipeline;
+use crate::mfcc::MelFilterbank;
 use crate::smoothing::FeatureSmoother;
 
 /// Spawn the audio analysis thread from microphone capture.
@@ -201,6 +202,7 @@ fn run_file_analysis_loop(
     let mut fft = FftPipeline::new(fft_size);
     let mut beat = BeatDetector::new();
     let mut smoother = FeatureSmoother::new(audio_smoothing);
+    let mut filterbank = MelFilterbank::new(fft_size, sample_rate);
     let mut window_buf: Vec<f32> = vec![0.0; fft_size];
 
     let frame_period = std::time::Duration::from_secs_f64(1.0 / f64::from(target_fps.max(1)));
@@ -259,6 +261,12 @@ fn run_file_analysis_loop(
         feats.bpm = bpm;
         feats.beat_phase = phase;
 
+        // MFCC timbral features
+        let mfcc = filterbank.compute(spectrum);
+        feats.mfcc = mfcc;
+        feats.timbral_brightness = (mfcc[1] / 50.0 + 0.5).clamp(0.0, 1.0);
+        feats.timbral_roughness = (mfcc[2].abs() / 30.0).clamp(0.0, 1.0);
+
         let smoothed = smoother.smooth(&feats);
         buf_input.write(smoothed);
 
@@ -278,6 +286,7 @@ fn run_analysis_loop(
     let mut fft = FftPipeline::new(fft_size);
     let mut beat = BeatDetector::new();
     let mut smoother = FeatureSmoother::new(audio_smoothing);
+    let mut filterbank = MelFilterbank::new(fft_size, sample_rate);
     let mut sample_buf: Vec<f32> = Vec::with_capacity(fft_size * 2);
 
     let frame_period = std::time::Duration::from_secs_f64(1.0 / f64::from(target_fps.max(1)));
@@ -301,6 +310,12 @@ fn run_analysis_loop(
             feats.beat_intensity = intensity;
             feats.bpm = bpm;
             feats.beat_phase = phase;
+
+            // MFCC timbral features
+            let mfcc = filterbank.compute(spectrum);
+            feats.mfcc = mfcc;
+            feats.timbral_brightness = (mfcc[1] / 50.0 + 0.5).clamp(0.0, 1.0);
+            feats.timbral_roughness = (mfcc[2].abs() / 30.0).clamp(0.0, 1.0);
 
             let smoothed = smoother.smooth(&feats);
             buf_input.write(smoothed);

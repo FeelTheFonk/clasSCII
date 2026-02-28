@@ -333,6 +333,14 @@ pub struct AudioFeatures {
     /// Phase du beat [0.0, 1.0] (0.0 = sur le beat, 0.5 = entre deux beats).
     pub beat_phase: f32,
 
+    // === Timbral features (MFCC-derived) ===
+    /// MFCC coefficients (first 5).
+    pub mfcc: [f32; 5],
+    /// Timbral brightness (MFCC1 normalized) [0.0, 1.0].
+    pub timbral_brightness: f32,
+    /// Timbral roughness (MFCC2 normalized) [0.0, 1.0].
+    pub timbral_roughness: f32,
+
     // === Spectre compressé pour visualisation ===
     /// 32 bandes log-fréquence, normalisées [0.0, 1.0].
     pub spectrum_bands: [f32; 32],

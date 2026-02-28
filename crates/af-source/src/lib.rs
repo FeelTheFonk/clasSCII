@@ -1,5 +1,6 @@
+//! Visual source modules for clasSCII (image, video, webcam, procedural).
+
 pub mod folder_batch;
-/// Visual source modules for clasSCII (image, video, webcam, procedural).
 pub mod image;
 pub mod resize;
 

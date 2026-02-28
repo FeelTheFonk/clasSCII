@@ -2,11 +2,12 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use crate::creation::CreationEngine;
 use af_ascii::compositor::Compositor;
 use af_audio::state::AudioCommand;
 use af_core::charset;
 use af_core::clock::MediaClock;
-use af_core::config::{BgStyle, ColorMode, RenderConfig, RenderMode};
+use af_core::config::{BgStyle, ColorMode, DitherMode, RenderConfig, RenderMode};
 use af_core::frame::{AsciiGrid, AudioFeatures, FrameBuffer};
 use af_render::AudioPanelState;
 use af_render::fps::FpsCounter;
@@ -64,6 +65,8 @@ pub enum AppState {
     AudioPanel,
     /// Choix Fichier ou Dossier (Export Batch).
     FileOrFolderPrompt,
+    /// Mode création interactif (effets audio-réactifs avec presets).
+    CreationMode,
     /// Fermeture de l'application. doit se terminer au prochain tour de boucle.
     Quitting,
 }
@@ -126,6 +129,18 @@ pub struct App {
     pub audio_panel: AudioPanelState,
     /// Horloge partagée A/V (None si pas d'audio fichier chargé).
     pub media_clock: Option<Arc<MediaClock>>,
+    /// Pre-allocated fg buffer for chromatic aberration effect.
+    pub effect_fg_buf: Vec<(u8, u8, u8)>,
+    /// Pre-allocated row buffer for wave distortion effect.
+    pub effect_row_buf: Vec<af_core::frame::AsciiCell>,
+    /// Onset envelope (continuous, decays via strobe_decay).
+    pub onset_envelope: f32,
+    /// Color pulse accumulated phase [0.0, 1.0).
+    pub color_pulse_phase: f32,
+    /// Per-mapping EMA smooth state for audio mappings.
+    pub mapping_smooth_state: Vec<f32>,
+    /// Creation mode engine for automated audio-reactive effects.
+    pub creation_engine: CreationEngine,
 }
 
 impl App {
@@ -191,6 +206,12 @@ impl App {
             charset_edit_cursor: 0,
             audio_panel: AudioPanelState::new(audio_mappings_len),
             media_clock: None,
+            effect_fg_buf: Vec::new(),
+            effect_row_buf: Vec::new(),
+            onset_envelope: 0.0,
+            color_pulse_phase: 0.0,
+            mapping_smooth_state: Vec::new(),
+            creation_engine: CreationEngine::default(),
         })
     }
 
@@ -263,7 +284,12 @@ impl App {
             // R1: acceptable — ~200B/frame allocation for mutable audio mapping overlay
             let mut render_config = (**config).clone();
             if let Some(ref features) = audio_features {
-                pipeline::apply_audio_mappings(&mut render_config, features);
+                pipeline::apply_audio_mappings(
+                    &mut render_config,
+                    features,
+                    self.onset_envelope,
+                    &mut self.mapping_smooth_state,
+                );
             }
 
             // === Process source frame into ASCII grid ===
@@ -281,7 +307,68 @@ impl App {
                 );
 
                 // === Post-processing effects ===
-                // Fade trails (blend with previous frame)
+                // 0. Temporal stability (anti-flicker, before all effects)
+                if render_config.temporal_stability > 0.0 {
+                    af_render::effects::apply_temporal_stability(
+                        &mut self.grid,
+                        &self.prev_grid,
+                        render_config.temporal_stability,
+                    );
+                }
+
+                // Update onset envelope (continuous decay)
+                if let Some(ref features) = audio_features {
+                    if features.onset {
+                        self.onset_envelope = 1.0;
+                    } else {
+                        self.onset_envelope *= render_config.strobe_decay;
+                    }
+                }
+
+                // Creation mode modulation (after compositor, before effects)
+                if self.state == AppState::CreationMode {
+                    let image_feats = crate::creation::compute_image_features(&self.grid);
+                    let dt = 1.0 / render_config.target_fps as f32;
+                    if let Some(ref features) = audio_features {
+                        self.creation_engine.modulate(
+                            features,
+                            &image_feats,
+                            &mut render_config,
+                            self.onset_envelope,
+                            dt,
+                        );
+                    }
+                }
+
+                // Update color pulse phase
+                if render_config.color_pulse_speed > 0.0 {
+                    self.color_pulse_phase = (self.color_pulse_phase
+                        + render_config.color_pulse_speed / render_config.target_fps as f32)
+                        % 1.0;
+                }
+
+                // 1. Wave distortion (spatial — before color effects)
+                af_render::effects::apply_wave_distortion(
+                    &mut self.grid,
+                    render_config.wave_amplitude,
+                    render_config.wave_speed,
+                    audio_features
+                        .as_ref()
+                        .map_or(0.0, |f| f.beat_phase * std::f32::consts::TAU),
+                    &mut self.effect_row_buf,
+                );
+
+                // 2. Chromatic aberration (color channel offset)
+                af_render::effects::apply_chromatic_aberration(
+                    &mut self.grid,
+                    render_config.chromatic_offset,
+                    &mut self.effect_fg_buf,
+                );
+
+                // 3. Color pulse (hue rotation)
+                af_render::effects::apply_color_pulse(&mut self.grid, self.color_pulse_phase);
+
+                // 4. Fade trails (blend with previous frame)
                 if render_config.fade_decay > 0.0 {
                     af_render::effects::apply_fade_trails(
                         &mut self.grid,
@@ -289,11 +376,22 @@ impl App {
                         render_config.fade_decay,
                     );
                 }
-                // Beat flash
-                if let Some(ref features) = audio_features {
-                    af_render::effects::apply_beat_flash(&mut self.grid, features);
-                }
-                // Glow
+
+                // 5. Strobe (onset envelope-driven brightness boost)
+                af_render::effects::apply_strobe(
+                    &mut self.grid,
+                    self.onset_envelope,
+                    render_config.beat_flash_intensity,
+                );
+
+                // 6. Scan lines
+                af_render::effects::apply_scan_lines(
+                    &mut self.grid,
+                    render_config.scanline_gap,
+                    0.3,
+                );
+
+                // 7. Glow (halo — last, on final brightness)
                 if render_config.glow_intensity > 0.0 {
                     af_render::effects::apply_glow(
                         &mut self.grid,
@@ -333,6 +431,27 @@ impl App {
                 None
             };
 
+            let layout_creation = if state == RenderState::CreationMode {
+                let effects: Vec<(&str, f32, f32)> = (0..crate::creation::NUM_EFFECTS)
+                    .map(|i| {
+                        (
+                            crate::creation::EFFECT_NAMES[i],
+                            self.creation_engine.effect_value(i, &render_config),
+                            self.creation_engine.effect_max(i),
+                        )
+                    })
+                    .collect();
+                Some(af_render::ui::CreationOverlayData {
+                    auto_mode: self.creation_engine.auto_mode,
+                    master_intensity: self.creation_engine.master_intensity,
+                    preset_name: self.creation_engine.active_preset.name(),
+                    selected_effect: self.creation_engine.selected_effect,
+                    effects,
+                })
+            } else {
+                None
+            };
+
             terminal.draw(|frame| {
                 af_render::ui::draw(
                     frame,
@@ -347,6 +466,7 @@ impl App {
                     &state,
                     layout_charset_edit,
                     layout_audio_panel,
+                    layout_creation.as_ref(),
                 );
             })?;
             self.sidebar_dirty = false;
@@ -364,6 +484,7 @@ impl App {
             AppState::CharsetEdit => RenderState::CharsetEdit,
             AppState::AudioPanel => RenderState::AudioPanel,
             AppState::FileOrFolderPrompt => RenderState::FileOrFolderPrompt,
+            AppState::CreationMode => RenderState::CreationMode,
             AppState::Quitting => RenderState::Quitting,
         }
     }
@@ -391,6 +512,11 @@ impl App {
             }
             if self.state == AppState::AudioPanel {
                 self.handle_audio_panel_key(code);
+                return;
+            }
+
+            if self.state == AppState::CreationMode {
+                self.handle_creation_key(code);
                 return;
             }
 
@@ -431,7 +557,10 @@ impl App {
                     | 'C'
                     | 'A',
                 ) => self.handle_render_key(code),
-                KeyCode::Char('f' | 'F' | 'g' | 'G') => self.handle_effect_key(code),
+                KeyCode::Char(
+                    'f' | 'F' | 'g' | 'G' | 'r' | 'R' | 'w' | 'W' | 'h' | 'H' | 'l' | 'L' | 't'
+                    | 'T',
+                ) => self.handle_effect_key(code),
                 KeyCode::Up | KeyCode::Down | KeyCode::Left | KeyCode::Right => {
                     self.handle_playback_key(code);
                 }
@@ -540,7 +669,7 @@ impl App {
                 }
             }
             KeyCode::Right => {
-                if self.audio_panel.selected_row >= 2 && self.audio_panel.selected_col < 4 {
+                if self.audio_panel.selected_row >= 2 && self.audio_panel.selected_col < 5 {
                     self.audio_panel.selected_col += 1;
                 }
             }
@@ -555,6 +684,8 @@ impl App {
                         target: "brightness".into(),
                         amount: 0.5,
                         offset: 0.0,
+                        curve: af_core::config::MappingCurve::default(),
+                        smoothing: None,
                     });
                 });
                 self.audio_panel.total_rows = 2 + self.config.load().audio_mappings.len();
@@ -621,6 +752,14 @@ impl App {
                         let targets = af_core::config::AUDIO_TARGETS;
                         let pos = targets.iter().position(|&s| s == m.target).unwrap_or(0);
                         m.target = targets[(pos + 1) % targets.len()].to_string();
+                    } else if col == 5 {
+                        use af_core::config::MappingCurve;
+                        m.curve = match m.curve {
+                            MappingCurve::Linear => MappingCurve::Exponential,
+                            MappingCurve::Exponential => MappingCurve::Threshold,
+                            MappingCurve::Threshold => MappingCurve::Smooth,
+                            MappingCurve::Smooth => MappingCurve::Linear,
+                        };
                     }
                 }
             });
@@ -674,6 +813,40 @@ impl App {
     }
 
     /// Prompt F or D handler
+    fn handle_creation_key(&mut self, code: KeyCode) {
+        match code {
+            KeyCode::Esc => {
+                self.state = AppState::Running;
+                self.sidebar_dirty = true;
+            }
+            KeyCode::Up => {
+                if self.creation_engine.selected_effect > 0 {
+                    self.creation_engine.selected_effect -= 1;
+                }
+            }
+            KeyCode::Down => {
+                if self.creation_engine.selected_effect < crate::creation::NUM_EFFECTS - 1 {
+                    self.creation_engine.selected_effect += 1;
+                }
+            }
+            KeyCode::Right => {
+                self.creation_engine.master_intensity =
+                    (self.creation_engine.master_intensity + 0.1).min(2.0);
+            }
+            KeyCode::Left => {
+                self.creation_engine.master_intensity =
+                    (self.creation_engine.master_intensity - 0.1).max(0.0);
+            }
+            KeyCode::Char('a') => {
+                self.creation_engine.auto_mode = !self.creation_engine.auto_mode;
+            }
+            KeyCode::Char('p') => {
+                self.creation_engine.active_preset = self.creation_engine.active_preset.next();
+            }
+            _ => {}
+        }
+    }
+
     fn handle_prompt_key(&mut self, code: KeyCode) {
         match code {
             KeyCode::Esc => {
@@ -765,7 +938,8 @@ impl App {
             KeyCode::Char('m') => self.toggle_config(|c| {
                 c.color_mode = match c.color_mode {
                     ColorMode::Direct => ColorMode::HsvBright,
-                    ColorMode::HsvBright => ColorMode::Quantized,
+                    ColorMode::HsvBright => ColorMode::Oklab,
+                    ColorMode::Oklab => ColorMode::Quantized,
                     ColorMode::Quantized => ColorMode::Direct,
                 };
             }),
@@ -799,11 +973,24 @@ impl App {
                 self.state = AppState::AudioPanel;
                 self.sidebar_dirty = true;
             }
+            KeyCode::Char('K') => {
+                self.state = AppState::CreationMode;
+                self.sidebar_dirty = true;
+            }
+            KeyCode::F(2) => {
+                self.toggle_config(|c| {
+                    c.dither_mode = match c.dither_mode {
+                        DitherMode::Bayer8x8 => DitherMode::BlueNoise16,
+                        DitherMode::BlueNoise16 => DitherMode::None,
+                        DitherMode::None => DitherMode::Bayer8x8,
+                    };
+                });
+            }
             _ => {}
         }
     }
 
-    /// Effect keys: fade, glow.
+    /// Effect keys: fade, glow, chromatic, wave, color pulse, scan lines, strobe.
     fn handle_effect_key(&mut self, code: KeyCode) {
         match code {
             KeyCode::Char('f') => {
@@ -817,6 +1004,54 @@ impl App {
             }
             KeyCode::Char('G') => {
                 self.toggle_config(|c| c.glow_intensity = (c.glow_intensity + 0.1).min(2.0));
+            }
+            KeyCode::Char('r') => {
+                self.toggle_config(|c| c.chromatic_offset = (c.chromatic_offset - 0.5).max(0.0));
+            }
+            KeyCode::Char('R') => {
+                self.toggle_config(|c| c.chromatic_offset = (c.chromatic_offset + 0.5).min(5.0));
+            }
+            KeyCode::Char('w') => {
+                self.toggle_config(|c| c.wave_amplitude = (c.wave_amplitude - 0.1).max(0.0));
+            }
+            KeyCode::Char('W') => {
+                self.toggle_config(|c| c.wave_amplitude = (c.wave_amplitude + 0.1).min(1.0));
+            }
+            KeyCode::Char('h') => {
+                self.toggle_config(|c| c.color_pulse_speed = (c.color_pulse_speed - 0.5).max(0.0));
+            }
+            KeyCode::Char('H') => {
+                self.toggle_config(|c| c.color_pulse_speed = (c.color_pulse_speed + 0.5).min(5.0));
+            }
+            KeyCode::Char('l') => {
+                self.toggle_config(|c| {
+                    c.scanline_gap = match c.scanline_gap {
+                        0 => 2,
+                        2 => 3,
+                        3 => 4,
+                        _ => 0,
+                    };
+                });
+            }
+            KeyCode::Char('L') => {
+                self.toggle_config(|c| {
+                    c.scanline_gap = match c.scanline_gap {
+                        0 => 4,
+                        4 => 3,
+                        3 => 2,
+                        _ => 0,
+                    };
+                });
+            }
+            KeyCode::Char('t') => {
+                self.toggle_config(|c| {
+                    c.beat_flash_intensity = (c.beat_flash_intensity - 0.1).max(0.0);
+                });
+            }
+            KeyCode::Char('T') => {
+                self.toggle_config(|c| {
+                    c.beat_flash_intensity = (c.beat_flash_intensity + 0.1).min(2.0);
+                });
             }
             _ => {}
         }
@@ -1061,7 +1296,7 @@ impl App {
 
         if let Some(folder) = picked {
             // Suspend app visually, do the export offline
-            println!("\n=== ASCIIFORGE BATCH EXPORT ===");
+            println!("\n=== clasSCII BATCH EXPORT ===");
             println!("Target Folder: {}", folder.display());
 
             #[allow(unused_variables)]

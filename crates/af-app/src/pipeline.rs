@@ -94,6 +94,9 @@ pub fn start_source(cli: &Cli, clock: Option<Arc<MediaClock>>) -> anyhow::Result
 
 /// Applique les mappings audio à une copie de la config avant le rendu.
 ///
+/// `onset_envelope` est un signal synthétique calculé dans App (decay exponentiel).
+/// `smooth_state` accumule l'EMA per-mapping (redimensionné si nécessaire).
+///
 /// # Example
 /// ```
 /// use af_core::config::RenderConfig;
@@ -102,12 +105,27 @@ pub fn start_source(cli: &Cli, clock: Option<Arc<MediaClock>>) -> anyhow::Result
 ///
 /// let mut config = RenderConfig::default();
 /// let features = AudioFeatures::default();
-/// apply_audio_mappings(&mut config, &features);
+/// let mut smooth = vec![];
+/// apply_audio_mappings(&mut config, &features, 0.0, &mut smooth);
 /// ```
-pub fn apply_audio_mappings(config: &mut RenderConfig, features: &AudioFeatures) {
-    let sensitivity = config.audio_sensitivity;
+#[allow(clippy::too_many_lines)]
+pub fn apply_audio_mappings(
+    config: &mut RenderConfig,
+    features: &AudioFeatures,
+    onset_envelope: f32,
+    smooth_state: &mut Vec<f32>,
+) {
+    use af_core::config::MappingCurve;
 
-    for mapping in &config.audio_mappings {
+    let sensitivity = config.audio_sensitivity;
+    let global_smoothing = config.audio_smoothing;
+
+    // Resize smooth_state si le nombre de mappings a changé
+    if smooth_state.len() != config.audio_mappings.len() {
+        smooth_state.resize(config.audio_mappings.len(), 0.0);
+    }
+
+    for (i, mapping) in config.audio_mappings.iter().enumerate() {
         if !mapping.enabled {
             continue;
         }
@@ -135,10 +153,32 @@ pub fn apply_audio_mappings(config: &mut RenderConfig, features: &AudioFeatures)
             }
             "beat_phase" => features.beat_phase,
             "bpm" => features.bpm / 200.0,
+            "timbral_brightness" => features.timbral_brightness,
+            "timbral_roughness" => features.timbral_roughness,
+            "onset_envelope" => onset_envelope,
             _ => 0.0,
         };
 
-        let delta = source_value * mapping.amount * sensitivity + mapping.offset;
+        // Apply response curve
+        let shaped = match &mapping.curve {
+            MappingCurve::Linear => source_value,
+            MappingCurve::Exponential => source_value * source_value,
+            MappingCurve::Threshold => {
+                if source_value > 0.3 {
+                    (source_value - 0.3) / 0.7
+                } else {
+                    0.0
+                }
+            }
+            MappingCurve::Smooth => source_value * source_value * (3.0 - 2.0 * source_value),
+        };
+
+        let raw_delta = shaped * mapping.amount * sensitivity + mapping.offset;
+
+        // Per-mapping EMA smoothing
+        let alpha = mapping.smoothing.unwrap_or(global_smoothing);
+        smooth_state[i] = smooth_state[i] * (1.0 - alpha) + raw_delta * alpha;
+        let delta = smooth_state[i];
 
         match mapping.target.as_str() {
             "edge_threshold" => {
@@ -163,6 +203,27 @@ pub fn apply_audio_mappings(config: &mut RenderConfig, features: &AudioFeatures)
                 if delta > 0.5 {
                     config.invert = !config.invert;
                 }
+            }
+            "beat_flash_intensity" => {
+                config.beat_flash_intensity = (config.beat_flash_intensity + delta).clamp(0.0, 2.0);
+            }
+            "chromatic_offset" => {
+                config.chromatic_offset = (config.chromatic_offset + delta).clamp(0.0, 5.0);
+            }
+            "wave_amplitude" => {
+                config.wave_amplitude = (config.wave_amplitude + delta).clamp(0.0, 1.0);
+            }
+            "color_pulse_speed" => {
+                config.color_pulse_speed = (config.color_pulse_speed + delta).clamp(0.0, 5.0);
+            }
+            "fade_decay" => {
+                config.fade_decay = (config.fade_decay + delta).clamp(0.0, 1.0);
+            }
+            "glow_intensity" => {
+                config.glow_intensity = (config.glow_intensity + delta).clamp(0.0, 2.0);
+            }
+            "zalgo_intensity" => {
+                config.zalgo_intensity = (config.zalgo_intensity + delta).clamp(0.0, 1.0);
             }
             _ => {}
         }
