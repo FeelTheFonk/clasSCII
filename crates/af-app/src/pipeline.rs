@@ -107,52 +107,6 @@ pub fn start_source(
         return Ok((frame, None));
     }
 
-    #[cfg(feature = "procedural")]
-    if let Some(ref proc_type) = cli.procedural {
-        log::info!("Starting procedural source: {proc_type}");
-
-        // Procedural sources generate frames on demand similar to images but animated.
-        // For simplicity in this architecture, since it's live/animated, we spawn a thread.
-        let (frame_tx, frame_rx) = flume::bounded(3);
-        let pt = proc_type.clone();
-
-        let cfg_clone = config.clone();
-        std::thread::Builder::new()
-            .name("procedural_generator".into())
-            .spawn(move || {
-                let mut source =
-                    match af_source::procedural::create_procedural_source(&pt, 640, 360, cfg_clone)
-                    {
-                        Ok(s) => s,
-                        Err(e) => {
-                            log::error!("Erreur création source procédurale: {e}");
-                            return;
-                        }
-                    };
-
-                // Target ~60fps generation rate
-                let target_frame_duration = std::time::Duration::from_nanos(16_666_667);
-                loop {
-                    let start = std::time::Instant::now();
-                    if let Some(frame) = af_core::traits::Source::next_frame(&mut *source)
-                        && frame_tx.send(frame).is_err()
-                    {
-                        break; // receiver dropped
-                    }
-                    let elapsed = start.elapsed();
-                    let sleep_dur = target_frame_duration.saturating_sub(elapsed);
-                    if !sleep_dur.is_zero() {
-                        std::thread::sleep(sleep_dur);
-                    }
-                }
-            })?;
-
-        #[cfg(feature = "video")]
-        return Ok((None, Some(frame_rx), None));
-        #[cfg(not(feature = "video"))]
-        return Ok((None, Some(frame_rx)));
-    }
-
     #[cfg(feature = "video")]
     if let Some(ref path) = cli.video {
         log::info!("Starting video source: {}", path.display());

@@ -35,7 +35,7 @@ impl VirtualCamera {
             && input.width == output.width
             && input.height == output.height;
 
-        if is_identity || input.is_camera_baked {
+        if is_identity {
             output.data.copy_from_slice(&input.data);
             return;
         }

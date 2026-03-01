@@ -107,13 +107,13 @@ Mode: Ascii (Full charset) | Color: Direct | Dither: BlueNoise16 | FPS: 60
 
 Demonstrates all 8 visual effects simultaneously at moderate, non-fatiguing levels. Chromatic (1.5), wave (0.25), glow (0.8), color pulse (1.0), scan lines (3), fade (0.4), temporal stability (0.3), zalgo (0.5). Four audio mappings: bass→wave, spectral_centroid→glow, spectral_flux→chromatic, rms→brightness.
 
-### 12_deep_zoom — Mandelbrot Camera-Reactive
+### 12_deep_zoom — Camera-Reactive Deep Zoom
 
 ```
 Mode: Braille | Color: Direct | Dither: BlueNoise16 | FPS: 60
 ```
 
-Designed for `--procedural mandelbrot`. Bass drives camera zoom depth (Smooth curve), spectral centroid steers rotation. Glow (0.6), fade (0.5), color pulse (0.5). Four audio mappings targeting camera and visual effects.
+Audio-reactive camera preset. Bass drives camera zoom depth (Smooth curve), spectral centroid steers rotation. Glow (0.6), fade (0.5), color pulse (0.5). Four audio mappings targeting camera and visual effects. Works with any image or video source.
 
 ### 13_breath — Ultra-Minimalist Contemplative
 

@@ -1,6 +1,6 @@
-# Deep Zoom — Mandelbrot fractal with audio-reactive camera.
+# Deep Zoom — Audio-reactive camera with deep zoom and rotation.
 # Bass drives zoom depth, spectral centroid steers rotation.
-# Best with: --procedural mandelbrot --audio mic
+# Best with: any image or video source + audio.
 [render]
 render_mode = "Braille"
 charset_index = 0

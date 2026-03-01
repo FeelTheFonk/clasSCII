@@ -204,8 +204,6 @@ Affine transformation applied to the source frame *before* ASCII conversion. Ope
 
 The camera applies a 2D affine transform (zoom, rotation, translation) to every pixel of the source frame using bilinear interpolation. This runs before any ASCII rasterization, so the effect is sub-pixel smooth.
 
-For procedural sources with native camera integration (e.g. Mandelbrot), the camera parameters are applied analytically by the generator itself (`is_camera_baked = true`), bypassing the pixel-level transform for mathematical precision.
-
 All 4 camera parameters are valid audio mapping targets — they can be driven by any of the 21 audio sources for reactive zoom, rotation, and panning.
 
 ---

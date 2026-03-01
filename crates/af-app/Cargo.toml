@@ -34,9 +34,8 @@ fastrand = "2"
 [features]
 default = ["image-source"]
 image-source = ["af-source/image-source"]
-full = ["video", "procedural"]
+full = ["video"]
 video = ["af-source/video"]
-procedural = ["af-source/procedural"]
 
 [build-dependencies]
 winresource = "0.1"

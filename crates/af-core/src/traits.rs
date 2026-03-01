@@ -5,7 +5,7 @@ use crate::frame::{AsciiGrid, AudioFeatures, FrameBuffer};
 
 /// Fournit des frames visuelles au pipeline.
 ///
-/// Implémenté par : `ImageSource`, `VideoSource`, `ProceduralSource`.
+/// Implémenté par : `ImageSource`, `VideoSource`.
 ///
 /// # Example
 /// ```

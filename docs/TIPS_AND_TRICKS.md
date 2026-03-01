@@ -73,7 +73,7 @@ Best settings:
 ### Abstract / Generative Art
 
 ```bash
-classcii --procedural mandelbrot --audio mic --mode octant
+classcii --image abstract.png --audio mic --mode octant --preset 12_deep_zoom
 ```
 
 Best settings:
@@ -81,6 +81,7 @@ Best settings:
 - **Shape matching**: on (`s`)
 - **Color mode**: Oklab — perceptually uniform
 - **Effects**: all active at moderate levels (use preset `11_reactive`)
+- **Camera**: use preset `12_deep_zoom` for audio-reactive zoom and rotation
 - **Background**: Transparent (`b`) for compositing
 
 ### High-Contrast Graphic Art

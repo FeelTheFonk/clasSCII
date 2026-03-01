@@ -14,10 +14,6 @@ pub struct Cli {
     #[arg(long)]
     pub video: Option<PathBuf>,
 
-    /// Générateur procédural : "mandelbrot".
-    #[arg(long)]
-    pub procedural: Option<String>,
-
     /// Source audio : "mic" pour microphone, ou chemin vers fichier audio.
     #[arg(long)]
     pub audio: Option<String>,
@@ -67,17 +63,16 @@ impl Cli {
     pub fn validate_source(&self) -> anyhow::Result<()> {
         let count = usize::from(self.image.is_some())
             + usize::from(self.video.is_some())
-            + usize::from(self.procedural.is_some())
             + usize::from(self.batch_folder.is_some());
 
         if count == 0 {
             anyhow::bail!(
-                "Aucune source visuelle spécifiée. Utilisez --image, --video, --procedural, ou --batch-folder."
+                "Aucune source visuelle spécifiée. Utilisez --image, --video, ou --batch-folder."
             );
         }
         if count > 1 {
             anyhow::bail!(
-                "Une seule source visuelle à la fois. Spécifiez --image, --video, --procedural, OU --batch-folder."
+                "Une seule source visuelle à la fois. Spécifiez --image, --video, OU --batch-folder."
             );
         }
 

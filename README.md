@@ -3,7 +3,7 @@ https://github.com/user-attachments/assets/942d140b-20d6-4c8b-acbb-9b1e2a568df1
 # _classcii
 
  Real-time audio-reactive ASCII/Unicode rendering engine for terminal-based TUI applications — with an offline generative batch export pipeline to mathematically lossless RGB MP4.
-This engine pushes the limits of typography by integrating advanced topologies (Braille, Quadrants, Sextants, Octants), Blue Noise and Bayer dithering, perceptual Oklab color space, MFCC timbral analysis, a SOTA Native Zero-Alloc Virtual Camera (Zoom, Pan, Rotation), 8 real-time post-processing effects, procedural infinite math generators (Mandelbrot), and audio-reactive Zalgo glitches — all while guaranteeing zero-allocation in the hot loops and 100% lock-free Safe Rust memory management.
+This engine pushes the limits of typography by integrating advanced topologies (Braille, Quadrants, Sextants, Octants), Blue Noise and Bayer dithering, perceptual Oklab color space, MFCC timbral analysis, a SOTA Native Zero-Alloc Virtual Camera (Zoom, Pan, Rotation), 8 real-time post-processing effects, and audio-reactive Zalgo glitches — all while guaranteeing zero-allocation in the hot loops and 100% lock-free Safe Rust memory management.
 
 ## Requirements
 
@@ -62,9 +62,6 @@ classcii --video path/to/video.mp4
 # Video with audio file override
 classcii --video path/to/video.mp4 --audio path/to/track.mp3
 
-# Audio-Reactive Continuous Procedural Generator
-classcii --procedural mandelbrot --audio track.mp3
-
 # Configuration overrides
 classcii --image photo.jpg --mode braille --fps 60
 classcii --image photo.jpg --preset 07_neon_abyss
@@ -105,7 +102,6 @@ classcii --batch-folder ./media/ --preset 02_matrix
 |------|-------------|---------|
 | `--image <PATH>` | Source: static image or animated GIF (PNG, JPEG, BMP, GIF) | — |
 | `--video <PATH>` | Source: video file (requires `--features video`) | — |
-| `--procedural <TYPE>` | Source: generator (`mandelbrot`) | — |
 | `--audio <PATH\|mic>` | Audio source: file path or `mic` for microphone | — |
 | `--batch-folder <DIR>` | Batch export: media folder (images + videos) | — |
 | `--batch-out <PATH>` | Batch export: output MP4 file path (opt) | — |
@@ -228,7 +224,6 @@ Navigation: `Up/Down` select effect (Master at top, then 9 effects), `Left/Right
 - **Oklab color space**: Perceptually uniform brightness adjustments via `rgb_to_oklab` / `oklab_to_rgb`. Selectable via `m` key (Direct / HSV / Oklab / Quantized). Color modes apply to all 6 render modes (ASCII, Braille, HalfBlock, Quadrant, Sextant, Octant).
 - **Blue Noise 16x16 dithering**: Perceptually superior to Bayer ordered dithering. Cycle with `n` (Bayer8x8 / BlueNoise16 / Off).
 - **Temporal Stability**: Anti-flicker heuristic based on character density distance (with Sextant/Braille-aware coverage), preventing rapid character oscillation.
-- **Mandelbrot Color Palette**: Smooth HSV cyclic coloring with adaptive iteration depth (100→1000) scaling with zoom level.
 
 ## Presets
 
@@ -247,7 +242,7 @@ Available in `config/presets/`, selectable via `--preset <name>` or cycled live 
 | `09_brutalism_mono` | Monochrome, high contrast brutalist style |
 | `10_ethereal_shape` | Shape matching, soft ethereal aesthetics |
 | `11_reactive` | All effects showcase, moderate levels, audio-reactive |
-| `12_deep_zoom` | Mandelbrot fractal with audio-reactive camera |
+| `12_deep_zoom` | Audio-reactive camera zoom and rotation |
 | `13_breath` | Ultra-minimalist contemplative, single RMS mapping |
 | `14_interference` | Wave interference patterns with chromatic separation |
 | `15_noir` | Cinematic film noir, monochrome, high contrast edges |

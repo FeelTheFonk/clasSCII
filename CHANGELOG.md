@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.1] — 2026-03-01
+
+### Removed
+- **Procedural mode (`--procedural`)**: CLI argument, feature flags (`procedural` in af-source and af-app Cargo.toml), and `full` feature simplified to `["video"]` only.
+- **Mandelbrot generator**: `MandelbrotSource`, `procedural.rs` factory module, and `procedural/mandelbrot.rs` (174 LOC) deleted.
+- **`is_camera_baked` field**: Removed from `FrameBuffer` struct (af-core), `ImageSource` (af-source), and camera early-return check (af-render). Field was only set to `true` by Mandelbrot — now dead code.
+- **`rayon` dependency** from af-source (only consumer was Mandelbrot parallel evaluation).
+- All documentation references to procedural mode and Mandelbrot cleaned from README, USAGE, PRESET_GUIDE, EFFECTS_REFERENCE, TIPS_AND_TRICKS.
+
+### Changed
+- **Preset 12_deep_zoom**: Renamed from "Mandelbrot Camera-Reactive" to "Camera-Reactive Deep Zoom". Now documented as working with any image or video source.
+
 ## [0.7.0] — 2026-03-01
 
 ### Added

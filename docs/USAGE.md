@@ -45,7 +45,6 @@ classcii --video clip.mp4 --audio track.mp3
 |------|-------------|---------|
 | `--image <PATH>` | Source: static image (PNG, JPEG, BMP, GIF) | — |
 | `--video <PATH>` | Source: video file (requires `--features video`) | — |
-| `--procedural <TYPE>` | Source: generator (`mandelbrot`) | — |
 | `--audio <PATH\|mic>` | Audio source: file path or `mic` for microphone | — |
 | `--batch-folder <DIR>` | Batch export: media folder (images + videos) | — |
 | `--batch-out <PATH>` | Batch export: output MP4 file path | auto-named |
@@ -61,9 +60,6 @@ classcii --video clip.mp4 --audio track.mp3
 ```bash
 # Braille mode at 60fps with neon preset and microphone
 classcii --image sunset.png --audio mic --mode braille --fps 60 --preset 07_neon_abyss
-
-# Procedural animation with live audio
-classcii --procedural mandelbrot --audio mic
 
 # Batch export with preset
 classcii --batch-folder ./media/ --audio track.mp3 --fps 60 --preset 02_matrix
@@ -309,7 +305,7 @@ The sidebar shows `K●` when Creation Mode is active (modulating) and `K○` wh
 | `09_brutalism_mono` | HalfBlock | Monochrome, high contrast brutalist style |
 | `10_ethereal_shape` | Ascii | Shape matching, soft ethereal aesthetics |
 | `11_reactive` | Ascii | All effects showcase at moderate levels, 4 audio mappings |
-| `12_deep_zoom` | Braille | Mandelbrot fractal with audio-reactive camera |
+| `12_deep_zoom` | Braille | Audio-reactive camera zoom and rotation |
 | `13_breath` | Ascii | Ultra-minimalist contemplative, single RMS mapping |
 | `14_interference` | Braille | Wave interference patterns with chromatic separation |
 | `15_noir` | HalfBlock | Cinematic film noir, monochrome, high contrast edges |

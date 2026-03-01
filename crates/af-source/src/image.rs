@@ -34,7 +34,6 @@ impl ImageSource {
                 data: rgba.into_raw(),
                 width,
                 height,
-                is_camera_baked: false,
             }),
         })
     }
@@ -72,7 +71,6 @@ pub fn load_image(path: &str) -> Result<FrameBuffer> {
         data: rgba.into_raw(),
         width: w,
         height: h,
-        is_camera_baked: false,
     })
 }
 
@@ -133,7 +131,6 @@ impl GifSource {
                 data: buf.as_raw().clone(),
                 width: w,
                 height: h,
-                is_camera_baked: false,
             }));
             delays.push(delay);
         }
