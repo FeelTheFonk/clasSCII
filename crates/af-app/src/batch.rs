@@ -211,7 +211,7 @@ pub fn run_batch_export(
             af_core::charset::CHARSET_DISCRETE,
             af_core::charset::CHARSET_DIGITAL,
             af_core::charset::CHARSET_BINARY,
-            af_core::charset::CHARSET_FULL, // fallback duplicate
+            af_core::charset::CHARSET_EXTENDED,
         ];
 
         log::info!("Boucle de Rendu : {total_frames} frames à {target_fps}fps");
@@ -219,12 +219,18 @@ pub fn run_batch_export(
         let mut macro_mode_override: Option<af_core::config::RenderMode> = None;
         let mut macro_invert_override: Option<bool> = None;
         let mut macro_charset_override: Option<(usize, String)> = None;
-        // C.3: New macro-mutations
         let mut macro_density_override: Option<f32> = None;
         let mut macro_density_countdown: u32 = 0;
-        let mut macro_effect_burst: Option<(u8, f32)> = None; // (effect_id, value)
+        let mut macro_effect_burst: Option<(u8, f32)> = None;
         let mut macro_effect_countdown: u32 = 0;
         let mut macro_color_mode_override: Option<af_core::config::ColorMode> = None;
+
+        // Mutation coordination
+        let mut frames_since_last_mutation: u32 = u32::MAX; // allow first mutation immediately
+        const MUTATION_COOLDOWN: u32 = 90;
+        const MAX_MUTATIONS_PER_EVENT: u32 = 2;
+
+        let render_start = std::time::Instant::now();
 
         for frame_idx in 0..total_frames {
             let timestamp_secs = frame_idx as f64 * frame_duration;
@@ -233,12 +239,44 @@ pub fn run_batch_export(
             // Apply audio mappings with curve + smoothing (zero-alloc: reuses frame_config)
             mapper.apply_at(timestamp_secs, onset_envelope, &mut frame_config);
 
-            // === True Generative Clip Sequencing ===
-            if current_features.onset && current_features.beat_intensity > 0.85 {
-                source.next_media();
+            // === 1. CLIP SEQUENCING (decoupled from mutations) ===
+            let energy = mapper.get_timeline().energy_at(frame_idx);
+            let clip_budget = match energy {
+                2 => source.max_clip_frames() / 2,     // High energy: clips 2× shorter
+                0 => source.max_clip_frames() * 3 / 2, // Low energy: clips 50% longer
+                _ => source.max_clip_frames(),          // Medium: proportional
+            };
 
-                // Mode cycle (12%) — Sextant/Octant excluded: glyphs absent from export font
-                if fastrand::f64() < 0.12 {
+            let should_advance = source.clip_frame_count() >= clip_budget
+                || (energy == 2
+                    && current_features.onset
+                    && current_features.beat_intensity > 0.9);
+
+            if should_advance {
+                source.next_media();
+            }
+
+            // === 2. MACRO MUTATIONS (cooldown + coordination) ===
+            frames_since_last_mutation = frames_since_last_mutation.saturating_add(1);
+
+            if current_features.onset
+                && current_features.beat_intensity > 0.85
+                && frames_since_last_mutation >= MUTATION_COOLDOWN
+            {
+                let mutation_scale = match energy {
+                    2 => 1.5,
+                    0 => 0.3,
+                    _ => 1.0,
+                };
+                let mut mutations: u32 = 0;
+                let intensity_scale = current_features.beat_intensity.max(0.5);
+
+                // Priority-ordered mutations (most visually impactful first)
+
+                // Mode cycle (12%)
+                if mutations < MAX_MUTATIONS_PER_EVENT
+                    && fastrand::f64() < 0.12 * mutation_scale
+                {
                     let modes = [
                         af_core::config::RenderMode::Ascii,
                         af_core::config::RenderMode::HalfBlock,
@@ -249,17 +287,15 @@ pub fn run_batch_export(
                         .as_ref()
                         .unwrap_or(&frame_config.render_mode);
                     let current_mode_idx = modes.iter().position(|m| m == current).unwrap_or(0);
-                    macro_mode_override = Some(modes[(current_mode_idx + 1) % modes.len()].clone());
-                }
-
-                // Invert flash (10%)
-                if fastrand::f64() < 0.10 {
-                    let current = macro_invert_override.unwrap_or(frame_config.invert);
-                    macro_invert_override = Some(!current);
+                    macro_mode_override =
+                        Some(modes[(current_mode_idx + 1) % modes.len()].clone());
+                    mutations += 1;
                 }
 
                 // Charset rotation (15%)
-                if fastrand::f64() < 0.15 {
+                if mutations < MAX_MUTATIONS_PER_EVENT
+                    && fastrand::f64() < 0.15 * mutation_scale
+                {
                     let current_idx = macro_charset_override
                         .as_ref()
                         .map_or(frame_config.charset_index, |(i, _)| *i);
@@ -267,24 +303,38 @@ pub fn run_batch_export(
                     let mut new_charset = String::new();
                     new_charset.push_str(charset_pool[new_idx]);
                     macro_charset_override = Some((new_idx, new_charset));
+                    mutations += 1;
                 }
 
-                // Density pulse (8%): 0.5 or 2.0 for 30 frames
-                if fastrand::f64() < 0.08 {
-                    macro_density_override = Some(if fastrand::bool() { 0.5 } else { 2.0 });
-                    macro_density_countdown = 30;
-                }
-
-                // Effect burst (6%): random effect boost for 60 frames
-                if fastrand::f64() < 0.06 {
-                    let bursts: [(u8, f32); 4] = [(0, 1.5), (1, 2.5), (2, 0.4), (3, 2.0)];
+                // Effect burst (6%) — intensity-scaled values
+                if mutations < MAX_MUTATIONS_PER_EVENT
+                    && fastrand::f64() < 0.06 * mutation_scale
+                {
+                    let bursts: [(u8, f32); 4] = [
+                        (0, 1.5 * intensity_scale),
+                        (1, 2.5 * intensity_scale),
+                        (2, 0.4 * intensity_scale),
+                        (3, 2.0 * intensity_scale),
+                    ];
                     let pick = bursts[fastrand::usize(0..bursts.len())];
                     macro_effect_burst = Some(pick);
                     macro_effect_countdown = 60;
+                    mutations += 1;
+                }
+
+                // Density pulse (8%)
+                if mutations < MAX_MUTATIONS_PER_EVENT
+                    && fastrand::f64() < 0.08 * mutation_scale
+                {
+                    macro_density_override = Some(if fastrand::bool() { 0.5 } else { 2.0 });
+                    macro_density_countdown = 30;
+                    mutations += 1;
                 }
 
                 // Color mode cycle (5%)
-                if fastrand::f64() < 0.05 {
+                if mutations < MAX_MUTATIONS_PER_EVENT
+                    && fastrand::f64() < 0.05 * mutation_scale
+                {
                     let modes = [
                         af_core::config::ColorMode::Direct,
                         af_core::config::ColorMode::HsvBright,
@@ -295,11 +345,26 @@ pub fn run_batch_export(
                         .as_ref()
                         .unwrap_or(&frame_config.color_mode);
                     let idx = modes.iter().position(|m| m == current).unwrap_or(0);
-                    macro_color_mode_override = Some(modes[(idx + 1) % modes.len()].clone());
+                    macro_color_mode_override =
+                        Some(modes[(idx + 1) % modes.len()].clone());
+                    mutations += 1;
+                }
+
+                // Invert flash (10%)
+                if mutations < MAX_MUTATIONS_PER_EVENT
+                    && fastrand::f64() < 0.10 * mutation_scale
+                {
+                    let current = macro_invert_override.unwrap_or(frame_config.invert);
+                    macro_invert_override = Some(!current);
+                    mutations += 1;
+                }
+
+                if mutations > 0 {
+                    frames_since_last_mutation = 0;
                 }
             }
 
-            // Decay countdowns for temporary mutations
+            // === 3. COUNTDOWN DECAY ===
             if macro_density_countdown > 0 {
                 macro_density_countdown -= 1;
                 if macro_density_countdown == 0 {
@@ -340,7 +405,8 @@ pub fn run_batch_export(
                 frame_config.color_mode = cm.clone();
             }
 
-            if let Some(src_frame) = source.next_frame() {
+            // === 4. RENDER PIPELINE ===
+            let have_source = if let Some(src_frame) = source.next_frame() {
                 if transformed_source.width != src_frame.width
                     || transformed_source.height != src_frame.height
                 {
@@ -362,7 +428,13 @@ pub fn run_batch_export(
                     &frame_config,
                     &mut grid,
                 );
+                true
+            } else {
+                // No source available — render prev_grid as static frame
+                false
+            };
 
+            if have_source || prev_grid.width > 0 {
                 // === Full effect pipeline (parity with interactive app.rs) ===
 
                 // 0. Temporal stability (anti-flicker)
@@ -386,6 +458,8 @@ pub fn run_batch_export(
                     color_pulse_phase = (color_pulse_phase
                         + frame_config.color_pulse_speed / target_fps as f32)
                         % 1.0;
+                } else {
+                    color_pulse_phase = 0.0;
                 }
 
                 // 1. Wave distortion (persistent phase + beat modulator)
@@ -429,8 +503,12 @@ pub fn run_batch_export(
                     frame_config.beat_flash_intensity,
                 );
 
-                // 6. Scan lines
-                af_render::effects::apply_scan_lines(&mut grid, frame_config.scanline_gap, 0.3);
+                // 6. Scan lines (parity: use config value, not hardcoded 0.3)
+                af_render::effects::apply_scan_lines(
+                    &mut grid,
+                    frame_config.scanline_gap,
+                    frame_config.scanline_darken,
+                );
 
                 // 7. Glow
                 if frame_config.glow_intensity > 0.0 {
@@ -446,13 +524,24 @@ pub fn run_batch_export(
 
                 raster_fb.data.fill(0);
                 rasterizer.render(&grid, &mut raster_fb, frame_config.zalgo_intensity);
-                muxer.write_frame(&raster_fb)?;
+
+                // Graceful pipe error handling (broken pipe = likely interrupted)
+                if let Err(e) = muxer.write_frame(&raster_fb) {
+                    log::warn!("Pipe write failed (likely interrupted): {e}");
+                    break;
+                }
             }
 
-            if frame_idx % 100 == 0 {
+            // Progress with ETA
+            if frame_idx % 100 == 0 && frame_idx > 0 {
+                let elapsed = render_start.elapsed().as_secs_f64();
+                let fps_actual = frame_idx as f64 / elapsed;
+                let remaining = (total_frames - frame_idx) as f64 / fps_actual;
                 log::info!(
-                    "Progress: {frame_idx}/{total_frames} ({:.1}%)",
-                    frame_idx as f64 / total_frames as f64 * 100.0
+                    "Progress: {frame_idx}/{total_frames} ({:.1}%) — {:.1} fps — ETA {:.0}s",
+                    frame_idx as f64 / total_frames as f64 * 100.0,
+                    fps_actual,
+                    remaining,
                 );
             }
         }

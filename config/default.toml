@@ -35,7 +35,7 @@ color_pulse_speed = 0.0            # HSV hue rotation speed (0 = off)
 scanline_gap = 0                   # Darken every Nth row (0 = off)
 strobe_decay = 0.85                # Strobe decay rate per frame
 temporal_stability = 0.5           # Anti-flicker strength (0 = off)
-zalgo_intensity = 0.5              # Zalgo diacritics intensity
+zalgo_intensity = 0.0              # Zalgo diacritics intensity (0 = off)
 
 # Display
 target_fps = 60

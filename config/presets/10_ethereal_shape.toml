@@ -26,6 +26,7 @@ color_pulse_speed = 0.4
 scanline_gap = 0
 strobe_decay = 0.9
 temporal_stability = 0.6
+zalgo_intensity = 0.0
 target_fps = 60
 fullscreen = false
 show_spectrum = true

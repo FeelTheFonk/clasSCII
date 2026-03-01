@@ -50,7 +50,7 @@ impl Mp4Muxer {
             ])
             .stdin(Stdio::piped())
             .stdout(Stdio::null())
-            .stderr(Stdio::null())
+            .stderr(Stdio::piped())
             .spawn()
             .context(
                 "Échec de l'initialisation de l'encodeur Video ffmpeg. (Est-il dans PATH ?)",
@@ -79,9 +79,10 @@ impl Mp4Muxer {
     pub fn finish(mut self) -> Result<()> {
         drop(self.ffmpeg_child.stdin.take());
 
-        let status = self.ffmpeg_child.wait()?;
-        if !status.success() {
-            anyhow::bail!("ffmpeg s'est terminé avec une erreur: {status}");
+        let output = self.ffmpeg_child.wait_with_output()?;
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            anyhow::bail!("ffmpeg encoder error: {stderr}");
         }
         Ok(())
     }
@@ -116,9 +117,13 @@ pub fn mux_audio_video(video_path: &Path, audio_path: &Path, final_path: &Path) 
         final_str,
     ]);
 
-    let status = command.spawn()?.wait()?;
-    if !status.success() {
-        anyhow::bail!("Échec du muxing visuel/audio final : {status}");
+    let output = command
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .output()?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        anyhow::bail!("Mux audio/video error: {stderr}");
     }
 
     Ok(())

@@ -38,6 +38,15 @@ pub struct FolderBatchSource {
     clip_frame_count: u32,
     /// Maximum frames per clip (proportional to total_frames / file_count).
     max_clip_frames: u32,
+
+    /// Previous output frame for crossfade transition.
+    crossfade_prev: Option<Arc<FrameBuffer>>,
+    /// Remaining crossfade frames (countdown).
+    crossfade_remaining: u32,
+    /// Total crossfade duration in frames.
+    crossfade_duration: u32,
+    /// Last output frame (for crossfade capture).
+    last_output_frame: Option<Arc<FrameBuffer>>,
 }
 
 impl FolderBatchSource {
@@ -58,6 +67,8 @@ impl FolderBatchSource {
             (total_frames / files.len() as u32).max(1)
         };
 
+        let crossfade_duration = (target_fps / 2).max(1);
+
         let mut source = Self {
             files,
             current_idx: 0,
@@ -72,6 +83,10 @@ impl FolderBatchSource {
             target_fps,
             clip_frame_count: 0,
             max_clip_frames,
+            crossfade_prev: None,
+            crossfade_remaining: 0,
+            crossfade_duration,
+            last_output_frame: None,
         };
 
         source.load_current();
@@ -109,8 +124,24 @@ impl FolderBatchSource {
         if self.files.is_empty() {
             return;
         }
+        // Capture last frame for crossfade
+        self.crossfade_prev = self.last_output_frame.take();
+        self.crossfade_remaining = self.crossfade_duration;
+
         self.current_idx = (self.current_idx + 1) % self.files.len();
         self.load_current();
+    }
+
+    /// Number of frames read from the current clip.
+    #[must_use]
+    pub fn clip_frame_count(&self) -> u32 {
+        self.clip_frame_count
+    }
+
+    /// Maximum frames per clip (proportional budget).
+    #[must_use]
+    pub fn max_clip_frames(&self) -> u32 {
+        self.max_clip_frames
     }
 
     /// Charge le média courant.
@@ -150,10 +181,14 @@ impl FolderBatchSource {
             }
         }
         if IMAGE_EXTS.contains(&ext.as_str()) {
-            if let Ok(fb) = load_image(path.to_str().unwrap_or("")) {
-                self.current_image = Some(Arc::new(fb));
+            if let Some(path_str) = path.to_str() {
+                if let Ok(fb) = load_image(path_str) {
+                    self.current_image = Some(Arc::new(fb));
+                } else {
+                    log::warn!("FolderBatchSource: failed to load image {}", path.display());
+                }
             } else {
-                log::warn!("FolderBatchSource: failed to load image {}", path.display());
+                log::warn!("FolderBatchSource: non-UTF8 path {}", path.display());
             }
         } else {
             #[cfg(feature = "video")]
@@ -183,13 +218,9 @@ impl FolderBatchSource {
     }
 }
 
-impl Source for FolderBatchSource {
-    fn next_frame(&mut self) -> Option<Arc<FrameBuffer>> {
-        // Proportional clip duration: force advance when budget exhausted
-        if self.clip_frame_count >= self.max_clip_frames {
-            self.next_media();
-        }
-
+impl FolderBatchSource {
+    /// Internal: get raw frame without crossfade processing.
+    fn raw_next_frame(&mut self) -> Option<Arc<FrameBuffer>> {
         if let Some(gif) = &mut self.current_gif {
             self.clip_frame_count += 1;
             return gif.next_frame();
@@ -231,7 +262,7 @@ impl Source for FolderBatchSource {
                             let _ = c.wait();
                         }
                         self.next_media();
-                        self.next_frame()
+                        self.raw_next_frame()
                     }
                     Err(e) => {
                         log::warn!("FolderBatchSource: pipe read error: {e}");
@@ -250,6 +281,35 @@ impl Source for FolderBatchSource {
         {
             None
         }
+    }
+}
+
+impl Source for FolderBatchSource {
+    fn next_frame(&mut self) -> Option<Arc<FrameBuffer>> {
+        // Clip budget is managed by batch.rs — no auto-advance here.
+        let raw_frame = self.raw_next_frame();
+
+        // Apply crossfade if a transition is in progress
+        if self.crossfade_remaining > 0 {
+            if let (Some(prev), Some(curr)) = (&self.crossfade_prev, &raw_frame) {
+                let t = 1.0
+                    - (self.crossfade_remaining as f32 / self.crossfade_duration as f32);
+                let blended = Arc::new(blend_frames(prev, curr, t));
+                self.crossfade_remaining -= 1;
+                if self.crossfade_remaining == 0 {
+                    self.crossfade_prev = None;
+                }
+                self.last_output_frame = Some(Arc::clone(&blended));
+                return Some(blended);
+            }
+            self.crossfade_remaining = 0;
+            self.crossfade_prev = None;
+        }
+
+        if let Some(ref frame) = raw_frame {
+            self.last_output_frame = Some(Arc::clone(frame));
+        }
+        raw_frame
     }
 
     fn native_size(&self) -> (u32, u32) {
@@ -273,4 +333,17 @@ impl Source for FolderBatchSource {
     fn is_live(&self) -> bool {
         false
     }
+}
+
+/// Linear per-pixel RGBA blend between two frames.
+fn blend_frames(a: &FrameBuffer, b: &FrameBuffer, t: f32) -> FrameBuffer {
+    let w = a.width.max(b.width);
+    let h = a.height.max(b.height);
+    let mut out = FrameBuffer::new(w, h);
+    let inv_t = 1.0 - t;
+    let len = out.data.len().min(a.data.len()).min(b.data.len());
+    for i in 0..len {
+        out.data[i] = (f32::from(a.data[i]) * inv_t + f32::from(b.data[i]) * t) as u8;
+    }
+    out
 }

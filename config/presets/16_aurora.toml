@@ -25,7 +25,6 @@ wave_amplitude = 0.15
 wave_speed = 1.5
 color_pulse_speed = 0.8
 scanline_gap = 0
-strobe_decay = 0.75
 temporal_stability = 0.3
 zalgo_intensity = 0.0
 camera_zoom_amplitude = 1.0
