@@ -1387,7 +1387,11 @@ impl App {
             let (canvas_width, canvas_height) = if config.fullscreen {
                 (new_size.0, new_size.1)
             } else {
-                let spectrum_h = if config.show_spectrum { SPECTRUM_HEIGHT } else { 0u16 };
+                let spectrum_h = if config.show_spectrum {
+                    SPECTRUM_HEIGHT
+                } else {
+                    0u16
+                };
                 (
                     new_size.0.saturating_sub(SIDEBAR_WIDTH),
                     new_size.1.saturating_sub(spectrum_h),

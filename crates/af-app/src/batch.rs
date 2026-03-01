@@ -242,15 +242,13 @@ pub fn run_batch_export(
             // === 1. CLIP SEQUENCING (decoupled from mutations) ===
             let energy = mapper.get_timeline().energy_at(frame_idx);
             let clip_budget = match energy {
-                2 => source.max_clip_frames() / 2,     // High energy: clips 2× shorter
+                2 => source.max_clip_frames() / 2, // High energy: clips 2× shorter
                 0 => source.max_clip_frames() * 3 / 2, // Low energy: clips 50% longer
-                _ => source.max_clip_frames(),          // Medium: proportional
+                _ => source.max_clip_frames(),     // Medium: proportional
             };
 
             let should_advance = source.clip_frame_count() >= clip_budget
-                || (energy == 2
-                    && current_features.onset
-                    && current_features.beat_intensity > 0.9);
+                || (energy == 2 && current_features.onset && current_features.beat_intensity > 0.9);
 
             if should_advance {
                 source.next_media();
@@ -274,9 +272,7 @@ pub fn run_batch_export(
                 // Priority-ordered mutations (most visually impactful first)
 
                 // Mode cycle (12%)
-                if mutations < MAX_MUTATIONS_PER_EVENT
-                    && fastrand::f64() < 0.12 * mutation_scale
-                {
+                if mutations < MAX_MUTATIONS_PER_EVENT && fastrand::f64() < 0.12 * mutation_scale {
                     let modes = [
                         af_core::config::RenderMode::Ascii,
                         af_core::config::RenderMode::HalfBlock,
@@ -287,15 +283,12 @@ pub fn run_batch_export(
                         .as_ref()
                         .unwrap_or(&frame_config.render_mode);
                     let current_mode_idx = modes.iter().position(|m| m == current).unwrap_or(0);
-                    macro_mode_override =
-                        Some(modes[(current_mode_idx + 1) % modes.len()].clone());
+                    macro_mode_override = Some(modes[(current_mode_idx + 1) % modes.len()].clone());
                     mutations += 1;
                 }
 
                 // Charset rotation (15%)
-                if mutations < MAX_MUTATIONS_PER_EVENT
-                    && fastrand::f64() < 0.15 * mutation_scale
-                {
+                if mutations < MAX_MUTATIONS_PER_EVENT && fastrand::f64() < 0.15 * mutation_scale {
                     let current_idx = macro_charset_override
                         .as_ref()
                         .map_or(frame_config.charset_index, |(i, _)| *i);
@@ -307,9 +300,7 @@ pub fn run_batch_export(
                 }
 
                 // Effect burst (6%) — intensity-scaled values
-                if mutations < MAX_MUTATIONS_PER_EVENT
-                    && fastrand::f64() < 0.06 * mutation_scale
-                {
+                if mutations < MAX_MUTATIONS_PER_EVENT && fastrand::f64() < 0.06 * mutation_scale {
                     let bursts: [(u8, f32); 4] = [
                         (0, 1.5 * intensity_scale),
                         (1, 2.5 * intensity_scale),
@@ -323,18 +314,14 @@ pub fn run_batch_export(
                 }
 
                 // Density pulse (8%)
-                if mutations < MAX_MUTATIONS_PER_EVENT
-                    && fastrand::f64() < 0.08 * mutation_scale
-                {
+                if mutations < MAX_MUTATIONS_PER_EVENT && fastrand::f64() < 0.08 * mutation_scale {
                     macro_density_override = Some(if fastrand::bool() { 0.5 } else { 2.0 });
                     macro_density_countdown = 30;
                     mutations += 1;
                 }
 
                 // Color mode cycle (5%)
-                if mutations < MAX_MUTATIONS_PER_EVENT
-                    && fastrand::f64() < 0.05 * mutation_scale
-                {
+                if mutations < MAX_MUTATIONS_PER_EVENT && fastrand::f64() < 0.05 * mutation_scale {
                     let modes = [
                         af_core::config::ColorMode::Direct,
                         af_core::config::ColorMode::HsvBright,
@@ -345,15 +332,12 @@ pub fn run_batch_export(
                         .as_ref()
                         .unwrap_or(&frame_config.color_mode);
                     let idx = modes.iter().position(|m| m == current).unwrap_or(0);
-                    macro_color_mode_override =
-                        Some(modes[(idx + 1) % modes.len()].clone());
+                    macro_color_mode_override = Some(modes[(idx + 1) % modes.len()].clone());
                     mutations += 1;
                 }
 
                 // Invert flash (10%)
-                if mutations < MAX_MUTATIONS_PER_EVENT
-                    && fastrand::f64() < 0.10 * mutation_scale
-                {
+                if mutations < MAX_MUTATIONS_PER_EVENT && fastrand::f64() < 0.10 * mutation_scale {
                     let current = macro_invert_override.unwrap_or(frame_config.invert);
                     macro_invert_override = Some(!current);
                     mutations += 1;

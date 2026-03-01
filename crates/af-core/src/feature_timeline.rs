@@ -43,10 +43,7 @@ impl FeatureTimeline {
     /// Energy level at a given frame index (0=low, 1=medium, 2=high).
     #[must_use]
     pub fn energy_at(&self, frame_idx: usize) -> u8 {
-        self.energy_levels
-            .get(frame_idx)
-            .copied()
-            .unwrap_or(1) // default medium
+        self.energy_levels.get(frame_idx).copied().unwrap_or(1) // default medium
     }
 
     /// Normalize continuous audio features to [0, 1] across the entire timeline.

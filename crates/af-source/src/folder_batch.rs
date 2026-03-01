@@ -292,8 +292,7 @@ impl Source for FolderBatchSource {
         // Apply crossfade if a transition is in progress
         if self.crossfade_remaining > 0 {
             if let (Some(prev), Some(curr)) = (&self.crossfade_prev, &raw_frame) {
-                let t = 1.0
-                    - (self.crossfade_remaining as f32 / self.crossfade_duration as f32);
+                let t = 1.0 - (self.crossfade_remaining as f32 / self.crossfade_duration as f32);
                 let blended = Arc::new(blend_frames(prev, curr, t));
                 self.crossfade_remaining -= 1;
                 if self.crossfade_remaining == 0 {

@@ -120,11 +120,15 @@ pub fn draw(frame: &mut Frame, ctx: &DrawContext<'_>) {
     }
 
     if ctx.config.fullscreen {
-        canvas::render_grid(frame.buffer_mut(), area, ctx.grid, ctx.config.zalgo_intensity);
+        canvas::render_grid(
+            frame.buffer_mut(),
+            area,
+            ctx.grid,
+            ctx.config.zalgo_intensity,
+        );
     } else {
-        let h_chunks =
-            Layout::horizontal([Constraint::Min(40), Constraint::Length(SIDEBAR_WIDTH)])
-                .split(area);
+        let h_chunks = Layout::horizontal([Constraint::Min(40), Constraint::Length(SIDEBAR_WIDTH)])
+            .split(area);
 
         let canvas_area = if ctx.config.show_spectrum {
             let v_chunks =
@@ -381,11 +385,7 @@ fn draw_sidebar(
         )),
         kv_line("f/F", "Fade", &fmt!("{:.1}", config.fade_decay)),
         kv_line("g/G", "Glow", &fmt!("{:.1}", config.glow_intensity)),
-        kv_line(
-            "t/T",
-            "Flash",
-            &fmt!("{:.1}", config.beat_flash_intensity),
-        ),
+        kv_line("t/T", "Flash", &fmt!("{:.1}", config.beat_flash_intensity)),
         kv_line("r/R", "Chroma", &fmt!("{:.1}", config.chromatic_offset)),
         kv_line("w/W", "Wave", &fmt!("{:.2}", config.wave_amplitude)),
         kv_line("h/H", "Pulse", &fmt!("{:.1}", config.color_pulse_speed)),
@@ -408,7 +408,11 @@ fn draw_sidebar(
             "Zoom",
             &fmt!("{:.2}", config.camera_zoom_amplitude),
         ));
-        lines.push(kv_line(",/.", "Rot", &fmt!("{:.2}", config.camera_rotation)));
+        lines.push(kv_line(
+            ",/.",
+            "Rot",
+            &fmt!("{:.2}", config.camera_rotation),
+        ));
         lines.push(kv_line(";/'", "PanX", &fmt!("{:.2}", config.camera_pan_x)));
         lines.push(kv_line(":/\"", "PanY", &fmt!("{:.2}", config.camera_pan_y)));
     }
@@ -423,7 +427,11 @@ fn draw_sidebar(
         "Sens",
         &fmt!("{:.1}", config.audio_sensitivity),
     ));
-    lines.push(kv_line("", "Smooth", &fmt!("{:.2}", config.audio_smoothing)));
+    lines.push(kv_line(
+        "",
+        "Smooth",
+        &fmt!("{:.2}", config.audio_smoothing),
+    ));
 
     if let Some(features) = audio {
         lines.push(kv_line("", "RMS", &fmt!("{:.2}", features.rms)));

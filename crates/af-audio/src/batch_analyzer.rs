@@ -81,9 +81,7 @@ impl BatchAnalyzer {
             let mut flux = 0.0f32;
             if prev_magnitudes.len() == magnitudes.len() {
                 let bass_cutoff = magnitudes.len() / 4;
-                for (j, (curr, prev)) in
-                    magnitudes.iter().zip(prev_magnitudes.iter()).enumerate()
-                {
+                for (j, (curr, prev)) in magnitudes.iter().zip(prev_magnitudes.iter()).enumerate() {
                     let diff = (curr - prev).max(0.0);
                     flux += if j < bass_cutoff { diff * 2.0 } else { diff };
                 }
@@ -140,8 +138,7 @@ impl BatchAnalyzer {
 
             if onset {
                 frame.onset = true;
-                frame.beat_intensity =
-                    ((flux - threshold) / (threshold + 0.001)).clamp(0.0, 1.0);
+                frame.beat_intensity = ((flux - threshold) / (threshold + 0.001)).clamp(0.0, 1.0);
                 last_onset = i;
 
                 // BPM estimation from onset intervals
