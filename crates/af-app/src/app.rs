@@ -11,7 +11,7 @@ use af_core::config::{BgStyle, ColorMode, DitherMode, RenderConfig, RenderMode};
 use af_core::frame::{AsciiGrid, AudioFeatures, FrameBuffer};
 use af_render::AudioPanelState;
 use af_render::fps::FpsCounter;
-use af_render::ui::RenderState;
+use af_render::ui::{DrawContext, RenderState, SIDEBAR_WIDTH, SPECTRUM_HEIGHT};
 use af_source::resize::Resizer;
 #[cfg(feature = "video")]
 use af_source::video::VideoCommand;
@@ -170,9 +170,9 @@ impl App {
         audio_cmd_tx: Option<flume::Sender<AudioCommand>>,
     ) -> Result<Self> {
         let terminal_size = crossterm::terminal::size()?;
-        let canvas_width = terminal_size.0.saturating_sub(24);
+        let canvas_width = terminal_size.0.saturating_sub(SIDEBAR_WIDTH);
         let spectrum_h = if config.load().show_spectrum {
-            3u16
+            SPECTRUM_HEIGHT
         } else {
             0u16
         };
@@ -319,6 +319,15 @@ impl App {
                 );
             }
 
+            // Update onset envelope (continuous decay — must run even without source frame)
+            if let Some(ref features) = audio_features {
+                if features.onset {
+                    self.onset_envelope = 1.0;
+                } else {
+                    self.onset_envelope *= render_config.strobe_decay;
+                }
+            }
+
             // === Process source frame into ASCII grid ===
             let render_start = Instant::now();
             if let Some(ref source_frame) = self.current_frame {
@@ -373,15 +382,6 @@ impl App {
                     );
                 }
 
-                // Update onset envelope (continuous decay)
-                if let Some(ref features) = audio_features {
-                    if features.onset {
-                        self.onset_envelope = 1.0;
-                    } else {
-                        self.onset_envelope *= render_config.strobe_decay;
-                    }
-                }
-
                 // Creation mode modulation (runs even when overlay is hidden)
                 if self.creation_mode_active {
                     let image_feats = crate::creation::compute_image_features(&self.grid);
@@ -397,11 +397,13 @@ impl App {
                     }
                 }
 
-                // Update color pulse phase
+                // Update color pulse phase (reset to 0 when speed is 0 to avoid frozen hue)
                 if render_config.color_pulse_speed > 0.0 {
                     self.color_pulse_phase = (self.color_pulse_phase
                         + render_config.color_pulse_speed / render_config.target_fps as f32)
                         % 1.0;
+                } else {
+                    self.color_pulse_phase = 0.0;
                 }
 
                 // 1. Wave distortion (persistent phase + beat modulator)
@@ -452,7 +454,7 @@ impl App {
                 af_render::effects::apply_scan_lines(
                     &mut self.grid,
                     render_config.scanline_gap,
-                    0.3,
+                    render_config.scanline_darken,
                 );
 
                 // 7. Glow (halo — last, on final brightness)
@@ -484,7 +486,6 @@ impl App {
             // === Rendu terminal ===
             self.fps_counter.tick();
             let state = self.render_state();
-            let sidebar_dirty = self.sidebar_dirty;
             let grid = &self.grid;
             let fps_counter = &self.fps_counter;
             let preset_name = if self.presets.is_empty() {
@@ -536,24 +537,23 @@ impl App {
             let perf_warning = self.perf_warning;
             let base_config = self.config.load();
             terminal.draw(|frame| {
-                af_render::ui::draw(
-                    frame,
+                let ctx = DrawContext {
                     grid,
-                    &render_config,
-                    &base_config,
-                    audio_features.as_ref(),
+                    config: &render_config,
+                    base_config: &base_config,
+                    audio: audio_features.as_ref(),
                     fps_counter,
                     preset_name,
                     loaded_visual,
                     loaded_audio,
-                    sidebar_dirty,
-                    &state,
-                    layout_charset_edit,
-                    layout_audio_panel,
-                    layout_creation.as_ref(),
+                    state: &state,
+                    charset_edit: layout_charset_edit,
+                    audio_panel: layout_audio_panel,
+                    creation: layout_creation.as_ref(),
                     creation_mode_active,
                     perf_warning,
-                );
+                };
+                af_render::ui::draw(frame, &ctx);
             })?;
             self.sidebar_dirty = false;
 
@@ -588,9 +588,16 @@ impl App {
         }) = *event
         {
             if modifiers.contains(KeyModifiers::CONTROL) {
-                if let KeyCode::Char('d' | 'o') = code {
-                    self.open_batch_folder_requested = true;
-                    self.sidebar_dirty = true;
+                match code {
+                    KeyCode::Char('d') => {
+                        self.open_batch_folder_requested = true;
+                        self.sidebar_dirty = true;
+                    }
+                    KeyCode::Char('o') => {
+                        self.open_visual_requested = true;
+                        self.sidebar_dirty = true;
+                    }
+                    _ => {}
                 }
                 return;
             }
@@ -619,6 +626,7 @@ impl App {
                     self.handle_navigation_key(code);
                 }
                 KeyCode::Tab
+                | KeyCode::BackTab
                 | KeyCode::Char(
                     '1'..='9'
                     | '0'
@@ -1007,7 +1015,22 @@ impl App {
                 };
                 self.config.store(Arc::new(new));
                 self.sidebar_dirty = true;
-                self.terminal_size = (0, 0); // recalcul pixel dimensions
+                self.terminal_size = (0, 0);
+            }
+            KeyCode::BackTab => {
+                let config = self.config.load();
+                let mut new = (**config).clone();
+                new.render_mode = match new.render_mode {
+                    RenderMode::Ascii => RenderMode::Octant,
+                    RenderMode::HalfBlock => RenderMode::Ascii,
+                    RenderMode::Braille => RenderMode::HalfBlock,
+                    RenderMode::Quadrant => RenderMode::Braille,
+                    RenderMode::Sextant => RenderMode::Quadrant,
+                    RenderMode::Octant => RenderMode::Sextant,
+                };
+                self.config.store(Arc::new(new));
+                self.sidebar_dirty = true;
+                self.terminal_size = (0, 0);
             }
             KeyCode::Char('1') => self.set_charset(0, charset::CHARSET_FULL),
             KeyCode::Char('2') => self.set_charset(1, charset::CHARSET_DENSE),
@@ -1170,6 +1193,7 @@ impl App {
                         0 => 2,
                         2 => 3,
                         3 => 4,
+                        4 => 8,
                         _ => 0,
                     };
                 });
@@ -1177,7 +1201,8 @@ impl App {
             KeyCode::Char('L') => {
                 self.toggle_config(|c| {
                     c.scanline_gap = match c.scanline_gap {
-                        0 => 4,
+                        0 => 8,
+                        8 => 4,
                         4 => 3,
                         3 => 2,
                         _ => 0,
@@ -1362,11 +1387,10 @@ impl App {
             let (canvas_width, canvas_height) = if config.fullscreen {
                 (new_size.0, new_size.1)
             } else {
-                let sidebar_width = 24u16;
-                let spectrum_height = if config.show_spectrum { 3u16 } else { 0u16 };
+                let spectrum_h = if config.show_spectrum { SPECTRUM_HEIGHT } else { 0u16 };
                 (
-                    new_size.0.saturating_sub(sidebar_width),
-                    new_size.1.saturating_sub(spectrum_height),
+                    new_size.0.saturating_sub(SIDEBAR_WIDTH),
+                    new_size.1.saturating_sub(spectrum_h),
                 )
             };
 

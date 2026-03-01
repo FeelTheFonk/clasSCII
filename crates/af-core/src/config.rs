@@ -81,6 +81,9 @@ pub struct RenderConfig {
     pub color_pulse_speed: f32,
     /// Scan line gap (0 = off, 2-8).
     pub scanline_gap: u8,
+    /// Scan line darken factor [0.0, 1.0]. Lower = darker scan lines.
+    #[serde(default = "default_scanline_darken")]
+    pub scanline_darken: f32,
     /// Strobe envelope decay [0.5, 0.99].
     pub strobe_decay: f32,
     /// Temporal stability (anti-flicker) [0.0, 1.0]. 0.0 = disabled.
@@ -155,6 +158,11 @@ pub const AUDIO_TARGETS: &[&str] = &[
 #[must_use]
 pub fn default_true() -> bool {
     true
+}
+
+#[must_use]
+fn default_scanline_darken() -> f32 {
+    0.3
 }
 
 /// Non-linear mapping curve for audio-to-visual shaping.
@@ -355,6 +363,7 @@ impl Default for RenderConfig {
             wave_speed: 2.0,
             color_pulse_speed: 0.0,
             scanline_gap: 0,
+            scanline_darken: 0.3,
             strobe_decay: 0.75,
             temporal_stability: 0.0,
             camera_zoom_amplitude: 1.0,
@@ -392,6 +401,7 @@ impl RenderConfig {
         self.camera_pan_x = self.camera_pan_x.clamp(-2.0, 2.0);
         self.camera_pan_y = self.camera_pan_y.clamp(-2.0, 2.0);
         self.scanline_gap = self.scanline_gap.min(8);
+        self.scanline_darken = self.scanline_darken.clamp(0.0, 1.0);
         self.target_fps = self.target_fps.clamp(15, 120);
         self.audio_smoothing = self.audio_smoothing.clamp(0.0, 1.0);
         self.audio_sensitivity = self.audio_sensitivity.clamp(0.0, 5.0);
