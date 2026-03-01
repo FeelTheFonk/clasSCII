@@ -89,14 +89,15 @@ classcii --batch-folder ./media/ --preset 02_matrix
 - `--batch-out` (Optional): Output path for the MP4. If omitted, uses `<folder_name>_<timestamp>.mp4`.
 
 **Pipeline**:
-1. Full offline audio analysis → `FeatureTimeline`.
-2. `AutoGenerativeMapper` modulates `RenderConfig` per frame.
-3. `FolderBatchSource` sequences media files.
-4. **Macro-generative** director logic creates structural variations (mode cycle, invert flashes, charset rotations) on strong beats.
-5. `Compositor` converts source pixels to `AsciiGrid` utilizing advanced bitmasking (Sextant, Octant) and O(1) Bayer Dithering.
-5. `Rasterizer` converts `AsciiGrid` to high-resolution RGBA pixels (parallel execution with zero-alloc Zalgo diacritics alpha-blending and dynamic upscaling via `--export-scale`).
-6. `Mp4Muxer` encodes to mathematically pure lossless RGB x264 CRF 0 / RGB24 (`libx264rgb`), fully preventing chroma subsampling bleed on typographical texts.
-7. Final audio+video muxing via FFmpeg.
+1. Full offline audio analysis → `FeatureTimeline` with bass-weighted spectral flux, BPM estimation, and feature normalization.
+2. Energy level classification (low/medium/high) from sliding-window RMS for adaptive clip pacing.
+3. `AutoGenerativeMapper` modulates `RenderConfig` per frame from the timeline.
+4. `FolderBatchSource` sequences media files with crossfade transitions between clips.
+5. **Macro-generative** director with mutation coordination (cooldown, max 2 per event, energy-scaled probabilities) creates structural variations (mode cycle, charset rotations, effect bursts, density pulses, color mode cycle, invert flashes) on strong beats.
+6. `Compositor` converts source pixels to `AsciiGrid` utilizing advanced bitmasking (Sextant, Octant) and O(1) Bayer Dithering.
+7. `Rasterizer` converts `AsciiGrid` to high-resolution RGBA pixels (parallel execution with zero-alloc Zalgo diacritics alpha-blending and dynamic upscaling via `--export-scale`).
+8. `Mp4Muxer` encodes to mathematically pure lossless RGB x264 CRF 0 / RGB24 (`libx264rgb`), fully preventing chroma subsampling bleed on typographical texts.
+9. Final audio+video muxing via FFmpeg.
 
 ## CLI Reference
 
@@ -252,6 +253,8 @@ Available in `config/presets/`, selectable via `--preset <name>` or cycled live 
 | `15_noir` | Cinematic film noir, monochrome, high contrast edges |
 | `16_aurora` | Aurora borealis, saturated glow, camera pan |
 | `17_static` | Broken TV / white noise, binary charset, zalgo on transients |
+| `18_spectral_bands` | Per-band frequency mapping, each band drives a distinct effect |
+| `19_cinematic_camera` | Audio-reactive virtual camera, bass→zoom, centroid→rotation |
 
 Usage: `classcii --image photo.jpg --preset 02_matrix`
 
@@ -267,7 +270,7 @@ Configurations and presets are managed via TOML files. Audio mappings and charse
 - Zero panicking unwraps — `?` operator and graceful fallback implemented across all layers (R3).
 - Zero unnecessary copies — driven by `Arc<FrameBuffer>`, `arc-swap`, and lock-free `triple_buffer` mechanics (R4).
 - Compile strictness: `cargo clippy --workspace --features video -- -D warnings` passes 0 warnings with pedantic lints enabled.
-- 71 tests (unit + doctests) pass. `cargo fmt --check --all` clean.
+- 69 tests (unit + doctests) pass. `cargo fmt --check --all` clean.
 - All division operations guarded against zero. All user inputs clamped to valid ranges.
 - Release profile: LTO=fat, codegen-units=1, strip=symbols, panic=abort.
 

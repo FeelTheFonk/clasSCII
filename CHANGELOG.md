@@ -5,6 +5,57 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] — 2026-03-01
+
+### Added
+- **Batch BeatDetector parity**: Offline `detect_onsets()` rewritten to replicate interactive `BeatDetector` logic — bass-weighted spectral flux (bass bins ×2.0), 10-frame warmup skip, FPS-adaptive cooldown (~130ms), BPM estimation via median of 16 inter-onset intervals (clamped [30, 300]), beat_phase accumulator with onset reset.
+- **Feature normalization**: Min/max scaling of 16 continuous audio features across entire track to [0, 1] range. Dead-zone protection (range < 1e-6 → 0.5).
+- **Energy level classification**: Sliding window RMS average (5-second window) with 30th/70th percentile thresholds → 3 energy levels (low/medium/high) driving clip pacing and mutation frequency.
+- **Source crossfade**: Linear per-pixel RGBA blend between consecutive clips over `fps/2` frames (~500ms at 30fps). Smooth transitions replace hard cuts on media file changes.
+- **Mutation coordination**: Cooldown (90 frames between mutation events), max 2 mutations per event, energy-scaled probabilities (high energy ×1.5, low energy ×0.3). Priority-ordered: mode → charset → effect burst → density pulse → color mode → invert flash.
+- **Effect burst intensity scaling**: Burst magnitudes scale with `beat_intensity` (minimum 0.5× floor), creating proportional visual response to onset strength.
+- **ETA progress logging**: Batch export logs frame count, percentage, actual FPS, and estimated remaining time every 100 frames.
+- **Preset 18_spectral_bands**: Each frequency band drives a distinct effect — sub_bass→wave, low_mid→fade, high_mid→chromatic, presence→glow, brilliance→pulse. Quadrant mode, Oklab color, shape matching.
+- **Preset 19_cinematic_camera**: Camera-focused preset — bass→zoom, spectral_centroid→rotation, mid→pan_x, presence→pan_y, rms→glow. HalfBlock mode, Direct color.
+
+### Fixed
+- **Scanline darken hardcoded**: Batch used `0.3` instead of `frame_config.scanline_darken`. Now reads from config.
+- **Color pulse phase drift**: Phase not reset when `color_pulse_speed` set to 0, causing offset accumulation. Now resets to 0.0.
+- **charset_pool duplicate**: Index 9 was `CHARSET_FULL` (duplicate of index 0). Replaced with `CHARSET_EXTENDED`.
+- **Double clip advance**: `FolderBatchSource::next_frame()` auto-advanced on clip budget AND `batch.rs` advanced on onset, causing media files to be skipped. Clip budget now managed exclusively by `batch.rs`.
+- **ffmpeg stderr silenced**: Both `Mp4Muxer` and `mux_audio_video()` discarded stderr via `Stdio::null()`. Now piped and logged on error — ffmpeg failures produce actionable error messages.
+- **folder_batch.rs path handling**: `path.to_str().unwrap_or("")` replaced with proper `if let Some(path_str)` pattern.
+- **Preset 02 Matrix**: `spectral_flux→zalgo_intensity` replaced with `spectral_flux→fade_decay` (zalgo too aggressive for Matrix aesthetic, fade_decay enhances rain effect).
+- **Preset 14 Interference**: Dead `beat_phase→color_pulse_speed` mapping (beat_phase was always 0 in batch) replaced with `spectral_flux→wave_amplitude` (Exponential).
+- **Preset TOML audit**: 17 presets audited — inert `wave_speed` removed from 10 presets (where `wave_amplitude=0.0`), inert `strobe_decay` removed from 6 presets (where `beat_flash_intensity=0.0`), explicit `zalgo_intensity=0.0` added to presets 01–10.
+- **Graceful pipe error**: Batch export now breaks cleanly on pipe write failure instead of panicking, handling interrupted ffmpeg processes.
+
+### Changed
+- **Clip sequencing decoupled from mutations**: Proportional clip budget with energy-based pacing — high energy sections use 50% shorter clips, low energy sections use 50% longer clips. Strong onsets (>0.9 beat_intensity) can accelerate clip change during high energy only.
+- **default.toml zalgo_intensity**: Default changed from 0.5 to 0.0. Presets that use zalgo specify it explicitly.
+
+## [0.6.1] — 2026-02-28
+
+### Added
+- **DrawContext struct**: Replaces 15 individual `draw()` parameters with a single context struct, improving readability and maintainability.
+- **Layout constants**: `SIDEBAR_WIDTH`, `SPECTRUM_HEIGHT`, `MIN_TERM_WIDTH`, `MIN_TERM_HEIGHT` centralized in constants. Eliminates magic numbers.
+- **Ctrl+O**: Open visual file picker (alternative to lowercase `o`).
+- **Shift+Tab**: Reverse render mode cycle.
+- **scanline_darken**: New config field (0.0–1.0) controlling scan line darkness. Previously hardcoded.
+- **Adaptive overlays**: Help, creation, and mixer overlays adapt to terminal height.
+- **Condensed sidebar**: Compact layout for terminals with fewer rows.
+
+### Fixed
+- **Sidebar layout**: 4-pad key + 6-pad label format with brackets removed from key indicators. Consistent alignment across all sections.
+- **Unicode truncation**: `truncate()` now respects char boundaries, preventing panics on multi-byte characters.
+- **Onset decay**: Fixed exponential decay calculation for onset envelope in UI.
+- **color_pulse_phase reset**: Phase now resets properly on preset change.
+- **Creation bars clamped**: Effect bar values clamped to [0, max] preventing overflow rendering.
+- **Scanline gap cap**: Maximum raised to 8 (was unbounded).
+
+### Changed
+- **widgets.rs merged into ui.rs**: Single rendering module instead of two, reducing indirection.
+
 ## [0.6.0] — 2026-02-28
 
 ### Added

@@ -1,6 +1,6 @@
 # Preset Guide
 
-Complete reference for classcii's 17 built-in presets, with creation tutorials and TOML structure.
+Complete reference for classcii's 19 built-in presets, with creation tutorials and TOML structure.
 
 ## Using Presets
 
@@ -33,7 +33,7 @@ High-contrast cyberpunk aesthetic using Braille characters. Strong glow (1.5), c
 Mode: Ascii (Edge charset) | Color: HsvBright | Dither: Bayer8x8 | FPS: 60
 ```
 
-Classic Matrix aesthetic. Heavy fade trails (0.85) create the rain effect. Low brightness (−0.1), high saturation (2.0). Audio maps rms to density_scale, beat_intensity to brightness, spectral_flux to zalgo.
+Classic Matrix aesthetic. Heavy fade trails (0.85) create the rain effect. Low brightness (−0.1), high saturation (2.0). Audio maps rms to density_scale, beat_intensity to brightness, spectral_flux to fade_decay.
 
 ### 03_ghost_edge — Spectral Edges
 
@@ -129,7 +129,7 @@ Extreme minimalism. A single RMS→brightness mapping (Smooth, 0.4) creates a sl
 Mode: Braille | Color: Oklab | Dither: BlueNoise16 | FPS: 60
 ```
 
-High wave speed (7.0) and amplitude (0.4) create moiré-like distortions. Scan lines (3), chromatic (1.0). Bass→wave (Exponential), beat_phase→color_pulse, bpm→wave, spectral_flux→chromatic. Low smoothing (0.4) for responsive patterns.
+High wave speed (7.0) and amplitude (0.4) create moiré-like distortions. Scan lines (3), chromatic (1.0). Bass→wave (Exponential), spectral_flux→wave (Exponential), spectral_flux→chromatic (Smooth). Low smoothing (0.4) for responsive patterns.
 
 ### 15_noir — Cinematic Film Noir
 
@@ -154,6 +154,22 @@ Mode: Ascii (charset " 01") | Color: Quantized | FPS: 60
 ```
 
 Binary charset, no fade (0.0), high density (1.5), high contrast (1.8), scan lines (2). Spectral_flatness→density_scale (Linear, 0.8), zero_crossing_rate→zalgo (Threshold, 0.6), onset_envelope→beat_flash (Smooth, 0.4). Very low smoothing (0.2) for intentional instability.
+
+### 18_spectral_bands — Per-Band Frequency Mapping
+
+```
+Mode: Quadrant | Color: Oklab | Dither: Bayer8x8 | FPS: 60
+```
+
+Each frequency band drives a distinct visual effect, showcasing the full range of audio sources. Sub_bass→wave_amplitude (Smooth), low_mid→fade_decay (Linear), high_mid→chromatic_offset (Smooth), presence→glow_intensity (Linear), brilliance→color_pulse_speed (Smooth). Shape matching enabled, moderate edge detection (0.3), sensitivity 1.3. Every part of the spectrum has a visible, distinct visual consequence.
+
+### 19_cinematic_camera — Audio-Reactive Camera
+
+```
+Mode: HalfBlock | Color: Direct | Dither: BlueNoise16 | FPS: 60
+```
+
+Camera-focused preset with smooth audio-driven motion. Bass→camera_zoom_amplitude (Smooth, 0.3), spectral_centroid→camera_rotation (Smooth, 0.2), mid→camera_pan_x (Linear, 0.2), presence→camera_pan_y (Linear, 0.15), rms→glow_intensity (Smooth, 0.4). High smoothing (0.7) for cinematic fluidity. Best with large images or video sources.
 
 ---
 

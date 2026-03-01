@@ -112,7 +112,7 @@ Each target is a visual parameter in `RenderConfig`. Mappings add to the current
 | `color_pulse_speed` | 0.0–5.0 | 0.0 | HSV hue rotation speed |
 | `fade_decay` | 0.0–1.0 | 0.3 | Temporal persistence — higher = longer trails |
 | `glow_intensity` | 0.0–2.0 | 0.5 | Brightness bloom around bright cells |
-| `zalgo_intensity` | 0.0–1.0 | 0.0 | Zalgo combining diacritics density |
+| `zalgo_intensity` | 0.0–5.0 | 0.0 | Zalgo combining diacritics density |
 
 ### Camera Parameters
 

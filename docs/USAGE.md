@@ -1,6 +1,6 @@
 # Usage Guide
 
-Complete reference for classcii v0.5.5 — real-time audio-reactive ASCII/Unicode rendering engine.
+Complete reference for classcii v0.7.0 — real-time audio-reactive ASCII/Unicode rendering engine.
 
 ## Quick Start
 
@@ -136,6 +136,7 @@ All controls are available in real-time TUI mode. Press `?` to show the in-app h
 | `<` / `>` | Camera zoom −/+ 0.1 | 0.1 – 10.0 |
 | `,` / `.` | Camera rotation −/+ 0.05 | periodic |
 | `;` / `'` | Camera pan X −/+ 0.05 | −2.0 – 2.0 |
+| `:` / `"` | Camera pan Y −/+ 0.05 | −2.0 – 2.0 |
 
 ### Audio
 
@@ -203,7 +204,7 @@ classcii maps audio features to visual parameters in real-time. Mappings are def
 | `color_pulse_speed` | 0.0–5.0 | HSV hue rotation speed |
 | `fade_decay` | 0.0–1.0 | Temporal persistence |
 | `glow_intensity` | 0.0–2.0 | Brightness bloom |
-| `zalgo_intensity` | 0.0–1.0 | Zalgo diacritics distortion |
+| `zalgo_intensity` | 0.0–5.0 | Zalgo diacritics distortion |
 | `camera_zoom_amplitude` | 0.1–10.0 | Virtual camera zoom multiplier |
 | `camera_rotation` | any | Virtual camera rotation (radians) |
 | `camera_pan_x` | −2.0–2.0 | Virtual camera horizontal pan |
@@ -293,19 +294,19 @@ The sidebar shows `K●` when Creation Mode is active (modulating) and `K○` wh
 
 ## Presets
 
-17 presets in `config/presets/`, selectable via `--preset <name>` or cycled live with `p`/`P`:
+19 presets in `config/presets/`, selectable via `--preset <name>` or cycled live with `p`/`P`:
 
 | Preset | Render Mode | Style |
 |--------|-------------|-------|
 | `01_cyber_braille` | Braille | High contrast cyberpunk, neon glow, chromatic aberration, scan lines |
 | `02_matrix` | Ascii | Classic Matrix digital rain aesthetic |
-| `03_ghost_edge` | Ascii | Edge detection with spectral fade trails |
+| `03_ghost_edge` | Quadrant | Edge detection with spectral fade trails |
 | `04_pure_ascii` | Ascii | Clean ASCII gradient, minimal effects |
 | `05_classic_gradient` | Ascii | Standard luminance gradient mapping |
 | `06_vector_edges` | Ascii | Edge-dominant, vector-style rendering |
 | `07_neon_abyss` | Ascii | Neon colors, deep glow, high saturation, timbral mapping |
-| `08_cyber_noise` | Ascii | Glitch-heavy, noise-driven visuals |
-| `09_brutalism_mono` | Ascii | Monochrome, high contrast brutalist style |
+| `08_cyber_noise` | Braille | Glitch-heavy, noise-driven visuals |
+| `09_brutalism_mono` | HalfBlock | Monochrome, high contrast brutalist style |
 | `10_ethereal_shape` | Ascii | Shape matching, soft ethereal aesthetics |
 | `11_reactive` | Ascii | All effects showcase at moderate levels, 4 audio mappings |
 | `12_deep_zoom` | Braille | Mandelbrot fractal with audio-reactive camera |
@@ -314,6 +315,8 @@ The sidebar shows `K●` when Creation Mode is active (modulating) and `K○` wh
 | `15_noir` | HalfBlock | Cinematic film noir, monochrome, high contrast edges |
 | `16_aurora` | Quadrant | Aurora borealis, saturated glow, camera pan |
 | `17_static` | Ascii | Broken TV / white noise, binary charset, zalgo on transients |
+| `18_spectral_bands` | Quadrant | Per-band frequency mapping, each band drives a distinct effect |
+| `19_cinematic_camera` | HalfBlock | Audio-reactive virtual camera, smooth cinematic motion |
 
 ```bash
 classcii --image photo.jpg --preset 07_neon_abyss
@@ -360,16 +363,18 @@ classcii --batch-folder ./media/ --audio track.mp3 --batch-out output.mp4 --fps 
 
 ### Pipeline
 
-1. **Discovery**: Scans folder for images (PNG, JPG) and videos (MP4, MKV, etc.). Audio auto-discovered if not specified.
-2. **Audio Analysis**: Full offline FFT, spectral features, onset detection → `FeatureTimeline`.
-3. **Generative Mapping**: `AutoGenerativeMapper` modulates `RenderConfig` per frame from the timeline.
-4. **Macro Director**: On strong beats, triggers structural variations — mode cycling, invert flashes, charset rotations.
-5. **Compositing**: Source pixels → `AsciiGrid` via advanced bitmasking and dithering.
-6. **Rasterization**: `AsciiGrid` → high-resolution RGBA pixels (parallel, zero-alloc, alpha-blended Zalgo).
-7. **Encoding**: Lossless libx264rgb CRF 0 / rgb24.
-8. **Muxing**: Final audio+video mux via FFmpeg.
+1. **Discovery**: Scans folder for images (PNG, JPG, GIF) and videos (MP4, MKV, etc.). Audio auto-discovered if not specified.
+2. **Audio Analysis**: Full offline FFT with bass-weighted spectral flux, BeatDetector-parity onset detection (warmup skip, FPS-adaptive cooldown, BPM estimation), feature normalization (16 features scaled to [0, 1]) → `FeatureTimeline`.
+3. **Energy Classification**: Sliding-window RMS average (5-second window) with 30th/70th percentile thresholds → 3 energy levels (low/medium/high) driving clip pacing and mutation frequency.
+4. **Generative Mapping**: `AutoGenerativeMapper` modulates `RenderConfig` per frame from the timeline.
+5. **Clip Sequencing**: Energy-based clip budget — high energy sections use shorter clips (50%), low energy sections use longer clips (150%). Crossfade transitions (linear RGBA blend over ~15 frames) between consecutive media files.
+6. **Macro Director**: Mutation coordination with cooldown (90 frames), max 2 mutations per event, energy-scaled probabilities. Priority-ordered: mode cycling → charset rotation → effect burst → density pulse → color mode → invert flash.
+7. **Compositing**: Source pixels → `AsciiGrid` via advanced bitmasking and dithering.
+8. **Rasterization**: `AsciiGrid` → high-resolution RGBA pixels (parallel, zero-alloc, alpha-blended Zalgo).
+9. **Encoding**: Lossless libx264rgb CRF 0 / rgb24.
+10. **Muxing**: Final audio+video mux via FFmpeg.
 
-All 8 post-processing effects and all 21 audio source mappings are applied in the batch pipeline, achieving full parity with interactive mode. Macro-mutations on strong beats include mode cycling, invert flashes, charset rotations, density pulses, effect bursts, and color mode cycling. Clip duration is proportionally distributed across all media files in the folder.
+All 8 post-processing effects and all 21 audio source mappings are applied in the batch pipeline, achieving full parity with interactive mode. Progress logging reports frame count, percentage, actual FPS, and ETA every 100 frames. Graceful pipe error handling ensures clean exit on interrupted exports.
 
 ---
 
